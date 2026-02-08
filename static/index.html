@@ -1,0 +1,153 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Inventory Comparison</title>
+    <style>
+      body { font-family: system-ui; padding: 16px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #ddd; padding: 6px; }
+      th { background: #f3f3f3; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+      input, select, button { padding: 6px; }
+    </style>
+  </head>
+  <body>
+    <h2>Inventory Comparison</h2>
+
+    <div class="row">
+      <select id="snapshots"></select>
+      <input id="brand" placeholder="Brand" />
+      <input id="itemClass" placeholder="Item Class" />
+      <input id="search" placeholder="Search item/name" />
+      <button id="refresh">Refresh</button>
+      <button id="export">Export (async)</button>
+      <span id="exportStatus"></span>
+    </div>
+
+    <div id="meta"></div>
+    <table>
+      <thead>
+        <tr>
+          <th>Brand</th><th>Item</th><th>Item Name</th><th>Class</th>
+          <th>NetSuite</th><th>Snap</th><th>Diff</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+
+    <script>
+      // IMPORTANT: set this to your Function App base URL if you're not using SWA integrated routing.
+      const API_BASE = "https://YOUR_FUNCTIONAPP.azurewebsites.net/api";
+
+      let page = 1;
+      const pageSize = 100;
+      let exportPoll = null;
+
+      async function loadSnapshots() {
+        const res = await fetch(`${API_BASE}/snapshots`);
+        const data = await res.json();
+        const sel = document.getElementById("snapshots");
+        sel.innerHTML = "";
+        data.forEach(s => {
+          const opt = document.createElement("option");
+          opt.value = s.snapshotId;
+          opt.textContent = `${s.snapshotDate} (${s.rowCount})`;
+          sel.appendChild(opt);
+        });
+      }
+
+      async function loadRows() {
+        const snapshotId = document.getElementById("snapshots").value;
+        const brand = document.getElementById("brand").value || "";
+        const itemClass = document.getElementById("itemClass").value || "";
+        const search = document.getElementById("search").value || "";
+
+        const qs = new URLSearchParams({
+          page: String(page),
+          pageSize: String(pageSize),
+          brand,
+          itemClass,
+          search,
+          sort: "difference_desc"
+        });
+
+        const res = await fetch(`${API_BASE}/snapshots/${snapshotId}/rows?` + qs.toString());
+        const data = await res.json();
+
+        document.getElementById("meta").textContent =
+          `Total rows: ${data.total} | Page: ${data.page}`;
+
+        const tbody = document.getElementById("rows");
+        tbody.innerHTML = "";
+        (data.rows || []).forEach(r => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${r.brand || ""}</td>
+            <td>${r.item || ""}</td>
+            <td>${r.item_name || ""}</td>
+            <td>${r.item_class || ""}</td>
+            <td style="text-align:right">${r.netsuite_total ?? ""}</td>
+            <td style="text-align:right">${r.snap_total ?? ""}</td>
+            <td style="text-align:right;font-weight:700">${r.difference ?? ""}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      async function startExport() {
+        const snapshotId = document.getElementById("snapshots").value;
+        const brand = document.getElementById("brand").value || "";
+        const itemClass = document.getElementById("itemClass").value || "";
+        const search = document.getElementById("search").value || "";
+
+        const res = await fetch(`${API_BASE}/exports`, {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({
+            snapshotId,
+            format: "xlsx",
+            filters: { brand, itemClass, search }
+          })
+        });
+
+        const { jobId } = await res.json();
+        const statusEl = document.getElementById("exportStatus");
+        statusEl.textContent = "Export: queued";
+
+        if (exportPoll) clearInterval(exportPoll);
+        exportPoll = setInterval(async () => {
+          const r = await fetch(`${API_BASE}/exports/${jobId}`);
+          const s = await r.json();
+          statusEl.textContent = "Export: " + s.status;
+
+          if (s.status === "done") {
+            clearInterval(exportPoll);
+            // NOTE: downloadUrl may require SAS / auth depending on your setup.
+            if (s.downloadUrl) {
+              const a = document.createElement("a");
+              a.href = s.downloadUrl;
+              a.textContent = "Download";
+              a.target = "_blank";
+              statusEl.appendChild(document.createTextNode(" — "));
+              statusEl.appendChild(a);
+            }
+          }
+          if (s.status === "failed") {
+            clearInterval(exportPoll);
+            statusEl.textContent = "Export: failed — " + (s.error || "");
+          }
+        }, 2000);
+      }
+
+      document.getElementById("refresh").addEventListener("click", () => { page = 1; loadRows(); });
+      document.getElementById("export").addEventListener("click", startExport);
+      document.getElementById("snapshots").addEventListener("change", () => { page = 1; loadRows(); });
+
+      (async () => {
+        await loadSnapshots();
+        await loadRows();
+      })();
+    </script>
+  </body>
+</html>
