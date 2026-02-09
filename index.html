@@ -105,9 +105,9 @@
           <td>${r.item_class || ""}</td>
           <td class="num">${r.netsuite_total ?? ""}</td>
           <td class="num">${r.snap_total ?? ""}</td>
-          <td class="num" style="font-weight:700">${r.difference ?? ""}</td>
+          <td class="num" style="font-weight:700;color:${r.difference === 0 ? '#15803d' : '#b91c1c'};">${r.difference ?? ""}</td>
           `;
-          
+
           tbody.appendChild(tr);
         });
       }
