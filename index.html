@@ -44,6 +44,16 @@
       const pageSize = 100;
       let exportPoll = null;
 
+      function formatDatePretty(isoDate) {
+      if (!isoDate) return "";
+      const d = new Date(isoDate);
+      return d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "2-digit",
+     year: "numeric"
+    });
+    }
+
       async function loadSnapshots() {
         const res = await fetch(`${API_BASE}/snapshots`);
         const data = await res.json();
@@ -52,7 +62,7 @@
         data.forEach(s => {
           const opt = document.createElement("option");
           opt.value = s.snapshotId;
-          opt.textContent = `${s.snapshotDate} (${s.rowCount})`;
+          opt.textContent = `${formatDatePretty(s.snapshotDate)} (${s.rowCount})`;
           sel.appendChild(opt);
         });
       }
