@@ -157,6 +157,20 @@
     return;
   }
 
+    let polls = 0;
+    const maxPolls = 60; // 60 * 2s = 2 minutes
+
+    exportPoll = setInterval(async () => {
+    polls++;
+    if (polls > maxPolls) {
+    clearInterval(exportPoll);
+    statusEl.textContent = "Export: still queued after 2 minutes (backend worker?)";
+    return;
+    }
+
+    // ... existing poll logic ...
+    }, 2000);
+
   if (exportPoll) clearInterval(exportPoll);
 
   exportPoll = setInterval(async () => {
