@@ -112,49 +112,95 @@
         });
       }
 
-      async function startExport() {
-        const snapshotId = document.getElementById("snapshots").value;
-        const brand = document.getElementById("brand").value || "";
-        const itemClass = document.getElementById("itemClass").value || "";
-        const search = document.getElementById("search").value || "";
+    async function startExport() {
+    const snapshotId = document.getElementById("snapshots").value;
+    const brand = document.getElementById("brand").value || "";
+    const itemClass = document.getElementById("itemClass").value || "";
+    const search = document.getElementById("search").value || "";
 
-        const res = await fetch(`${API_BASE}/exports`, {
-          method: "POST",
-          headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({
-            snapshotId,
-            format: "xlsx",
-            filters: { brand, itemClass, search }
-          })
-        });
+    const statusEl = document.getElementById("exportStatus");
+    statusEl.textContent = "Export: starting…";
 
-        const { jobId } = await res.json();
-        const statusEl = document.getElementById("exportStatus");
-        statusEl.textContent = "Export: queued";
+    let jobId = null;
 
-        if (exportPoll) clearInterval(exportPoll);
-        exportPoll = setInterval(async () => {
-          const r = await fetch(`${API_BASE}/exports/${jobId}`);
-          const s = await r.json();
-          statusEl.textContent = "Export: " + s.status;
+    try {
+    const res = await fetch(`${API_BASE}/exports`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({
+        snapshotId,
+        format: "xlsx",
+        filters: { brand, itemClass, search }
+      })
+    });
 
-          if (s.status === "done") {
-            clearInterval(exportPoll);
-            if (s.downloadUrl) {
-              const a = document.createElement("a");
-              a.href = s.downloadUrl;
-              a.textContent = "Download";
-              a.target = "_blank";
-              statusEl.appendChild(document.createTextNode(" — "));
-              statusEl.appendChild(a);
-            }
-          }
-          if (s.status === "failed") {
-            clearInterval(exportPoll);
-            statusEl.textContent = "Export: failed — " + (s.error || "");
-          }
-        }, 2000);
+    const postText = await res.text();
+    console.log("POST /exports status:", res.status, postText);
+
+    if (!res.ok) {
+      statusEl.textContent = `Export: POST failed (${res.status})`;
+      return;
+    }
+
+    const postJson = postText ? JSON.parse(postText) : {};
+    jobId = postJson.jobId;
+
+    if (!jobId) {
+      statusEl.textContent = "Export: no jobId returned";
+      return;
+    }
+
+    statusEl.textContent = "Export: queued";
+  } catch (e) {
+    console.error("Export POST error:", e);
+    statusEl.textContent = "Export: POST error — " + (e.message || e);
+    return;
+  }
+
+  if (exportPoll) clearInterval(exportPoll);
+
+  exportPoll = setInterval(async () => {
+    try {
+      const r = await fetch(`${API_BASE}/exports/${jobId}`, {
+        headers: { "Accept": "application/json" }
+      });
+
+      const text = await r.text();
+      console.log("GET /exports/" + jobId + " status:", r.status, text);
+
+      if (!r.ok) {
+        statusEl.textContent = `Export: status failed (${r.status})`;
+        return;
       }
+
+      const s = text ? JSON.parse(text) : {};
+      statusEl.textContent = "Export: " + (s.status || "(no status)");
+
+      if (s.status === "done") {
+        clearInterval(exportPoll);
+        if (s.downloadUrl) {
+          const a = document.createElement("a");
+          a.href = s.downloadUrl;
+          a.textContent = "Download";
+          a.target = "_blank";
+          statusEl.appendChild(document.createTextNode(" — "));
+          statusEl.appendChild(a);
+        } else {
+          statusEl.appendChild(document.createTextNode(" (no downloadUrl)"));
+        }
+      }
+
+      if (s.status === "failed") {
+        clearInterval(exportPoll);
+        statusEl.textContent = "Export: failed — " + (s.error || "");
+      }
+    } catch (e) {
+      console.error("Export poll error:", e);
+      statusEl.textContent = "Export: poll error — " + (e.message || e);
+    }
+  }, 2000);
+}
+
 
       document.getElementById("refresh").addEventListener("click", () => { page = 1; loadRows(); });
       document.getElementById("export").addEventListener("click", startExport);
