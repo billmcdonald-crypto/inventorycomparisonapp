@@ -40,12 +40,13 @@
     <script>
       console.log("script loaded ok");
 
-      // In Static Web Apps, use the SWA API proxy:
+      // Function App base URL (direct)
       const API_BASE = "https://inventorycomparisonapp-asehfcc5fwbwa4cy.westus-01.azurewebsites.net/api";
-
 
       let page = 1;
       const pageSize = 100;
+
+      // IMPORTANT: declare exportPoll only once
       let exportPoll = null;
 
       function formatDatePretty(isoDate) {
@@ -68,14 +69,14 @@
         const sel = document.getElementById("snapshots");
         sel.innerHTML = "";
 
-        (data || []).forEach(s => {
-          const opt = document.createElement("option");
-          opt.value = s.snapshotId;
-          opt.textContent = `${formatDatePretty(s.snapshotDate)} (${s.rowCount})`;
-          sel.appendChild(opt);
-        });
-
-        if (!data || !data.length) {
+        if (data && data.length) {
+          data.forEach(s => {
+            const opt = document.createElement("option");
+            opt.value = s.snapshotId;
+            opt.textContent = `${formatDatePretty(s.snapshotDate)} (${s.rowCount})`;
+            sel.appendChild(opt);
+          });
+        } else {
           const opt = document.createElement("option");
           opt.value = "";
           opt.textContent = "No snapshots found";
@@ -132,118 +133,128 @@
         });
       }
 
-let exportPoll = null;
+      async function startExport() {
+        const snapshotId = document.getElementById("snapshots").value;
+        if (!snapshotId) return;
 
-async function startExport() {
-  const snapshotId = document.getElementById("snapshots").value;
-  const brand = document.getElementById("brand").value || "";
-  const itemClass = document.getElementById("itemClass").value || "";
-  const search = document.getElementById("search").value || "";
+        const brand = document.getElementById("brand").value || "";
+        const itemClass = document.getElementById("itemClass").value || "";
+        const search = document.getElementById("search").value || "";
 
-  const statusEl = document.getElementById("exportStatus");
+        const statusEl = document.getElementById("exportStatus");
+        const btn = document.getElementById("export");
 
-  // Stop any existing poll loop
-  if (exportPoll) {
-    clearInterval(exportPoll);
-    exportPoll = null;
-  }
-
-  const btn = document.getElementById("export");
-  btn.disabled = true;
-
-  try {
-    statusEl.textContent = "Export: starting…";
-
-    const res = await fetch(`${API_BASE}/exports`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify({
-        snapshotId,
-        format: "xlsx",
-        filters: { brand, itemClass, search }
-      })
-    });
-
-    const text = await res.text();
-
-    if (!res.ok) {
-      statusEl.textContent = `Export: POST failed (${res.status})`;
-      btn.disabled = false;
-      return;
-    }
-
-    const data = text ? JSON.parse(text) : {};
-    const jobId = data.jobId;
-
-    if (data.downloadUrl) {
-      statusEl.textContent = "Export: done — ";
-      const a = document.createElement("a");
-      a.href = data.downloadUrl;
-      a.textContent = "Download";
-      a.target = "_blank";
-      statusEl.appendChild(a);
-      btn.disabled = false;
-      return;
-    }
-
-    if (!jobId) {
-      statusEl.textContent = "Export: no jobId returned";
-      btn.disabled = false;
-      return;
-    }
-
-    statusEl.textContent = "Export: queued";
-
-    let polls = 0;
-    const maxPolls = 60;
-
-    exportPoll = setInterval(async () => {
-      polls++;
-
-      try {
-        const r = await fetch(`${API_BASE}/exports/${jobId}`);
-        const t = await r.text();
-
-        if (!r.ok) return;
-
-        const s = t ? JSON.parse(t) : {};
-        statusEl.textContent = "Export: " + (s.status || "");
-
-        if (s.status === "done") {
+        // Stop any existing poll loop (prevents infinite loops)
+        if (exportPoll) {
           clearInterval(exportPoll);
           exportPoll = null;
-          btn.disabled = false;
-
-          statusEl.textContent = "Export: done — ";
-          const a = document.createElement("a");
-          a.href = s.downloadUrl;
-          a.textContent = "Download";
-          a.target = "_blank";
-          statusEl.appendChild(a);
         }
 
-        if (s.status === "failed") {
-          clearInterval(exportPoll);
-          exportPoll = null;
+        btn.disabled = true;
+
+        try {
+          statusEl.textContent = "Export: starting…";
+
+          const res = await fetch(`${API_BASE}/exports`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify({
+              snapshotId,
+              format: "xlsx",
+              filters: { brand, itemClass, search }
+            })
+          });
+
+          const text = await res.text();
+
+          if (!res.ok) {
+            statusEl.textContent = `Export: POST failed (${res.status})`;
+            btn.disabled = false;
+            return;
+          }
+
+          const data = text ? JSON.parse(text) : {};
+          const jobId = data.jobId;
+
+          // If backend returns an immediate downloadUrl, show it.
+          if (data.downloadUrl) {
+            statusEl.textContent = "Export: done — ";
+            const a = document.createElement("a");
+            a.href = data.downloadUrl;
+            a.textContent = "Download";
+            a.target = "_blank";
+            statusEl.appendChild(a);
+            btn.disabled = false;
+            return;
+          }
+
+          if (!jobId) {
+            statusEl.textContent = "Export: no jobId returned";
+            btn.disabled = false;
+            return;
+          }
+
+          statusEl.textContent = "Export: queued";
+
+          let polls = 0;
+          const maxPolls = 60; // ~2 minutes
+
+          exportPoll = setInterval(async () => {
+            polls++;
+
+            // timeout
+            if (polls > maxPolls) {
+              clearInterval(exportPoll);
+              exportPoll = null;
+              btn.disabled = false;
+              statusEl.textContent = "Export timeout";
+              return;
+            }
+
+            try {
+              const r = await fetch(`${API_BASE}/exports/${jobId}`, {
+                headers: { "Accept": "application/json" }
+              });
+
+              const t = await r.text();
+              if (!r.ok) return;
+
+              const s = t ? JSON.parse(t) : {};
+              statusEl.textContent = "Export: " + (s.status || "");
+
+              if (s.status === "done") {
+                clearInterval(exportPoll);
+                exportPoll = null;
+                btn.disabled = false;
+
+                statusEl.textContent = "Export: done — ";
+                if (s.downloadUrl) {
+                  const a = document.createElement("a");
+                  a.href = s.downloadUrl;
+                  a.textContent = "Download";
+                  a.target = "_blank";
+                  statusEl.appendChild(a);
+                } else {
+                  statusEl.appendChild(document.createTextNode("(no downloadUrl)"));
+                }
+              }
+
+              if (s.status === "failed") {
+                clearInterval(exportPoll);
+                exportPoll = null;
+                btn.disabled = false;
+                statusEl.textContent = "Export failed";
+              }
+            } catch (e) {
+              // keep polling; transient errors happen
+            }
+          }, 2000);
+
+        } catch (e) {
+          statusEl.textContent = "Export error";
           btn.disabled = false;
-          statusEl.textContent = "Export failed";
         }
-
-        if (polls > maxPolls) {
-          clearInterval(exportPoll);
-          exportPoll = null;
-          btn.disabled = false;
-          statusEl.textContent = "Export timeout";
-        }
-
-      } catch {}
-    }, 2000);
-
-  } catch (e) {
-    statusEl.textContent = "Export error";
-    btn.disabled = false;
-  }
-}
+      }
 
       document.getElementById("refresh").addEventListener("click", () => {
         page = 1;
