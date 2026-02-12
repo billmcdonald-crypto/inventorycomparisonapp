@@ -283,10 +283,19 @@ async function startExport() {
       document.getElementById("export").addEventListener("click", startExport);
       document.getElementById("snapshots").addEventListener("change", () => { page = 1; loadRows(); });
 
-      (async () => {
-        await loadSnapshots();
-        await loadRows();
-      })();
+    (async () => {
+    try {
+    console.log("Init starting...");
+    await loadSnapshots();
+    await loadRows();
+    console.log("Init finished OK");
+  } catch (e) {
+    console.error("Init error:", e);
+    document.getElementById("meta").textContent =
+      "Init failed: " + (e.message || e);
+  }
+  })();
+
     </script>
   </body>
 </html>
