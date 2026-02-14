@@ -10,11 +10,7 @@
       th { background: #f3f3f3; }
       .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
       input, select, button { padding: 6px; }
-
-      .num {
-      text-align: center;
-      }
-
+      .num { text-align: center; }
     </style>
   </head>
   <body>
@@ -42,42 +38,65 @@
     </table>
 
     <script>
-      // Function App base URL
+      console.log("script loaded ok");
+
+      // Function App base URL (direct)
       const API_BASE = "https://inventorycomparisonapp-asehfcc5fwbwa4cy.westus-01.azurewebsites.net/api";
 
       let page = 1;
       const pageSize = 100;
+
+      // IMPORTANT: declare exportPoll only once
       let exportPoll = null;
 
       function formatDatePretty(isoDate) {
-      if (!isoDate) return "";
-      const d = new Date(isoDate);
-      return d.toLocaleDateString("en-US", {
-      month: "short",
-      day: "2-digit",
-     year: "numeric"
-    });
-    }
+        if (!isoDate) return "";
+        const d = new Date(isoDate);
+        return d.toLocaleDateString("en-US", {
+          month: "short",
+          day: "2-digit",
+          year: "numeric"
+        });
+      }
 
       async function loadSnapshots() {
-        const res = await fetch(`${API_BASE}/snapshots`);
+        const res = await fetch(`${API_BASE}/snapshots`, {
+          headers: { "Accept": "application/json" }
+        });
+        if (!res.ok) throw new Error(`snapshots failed (${res.status})`);
+
         const data = await res.json();
         const sel = document.getElementById("snapshots");
         sel.innerHTML = "";
-        data.forEach(s => {
+
+        if (data && data.length) {
+          data.forEach(s => {
+            const opt = document.createElement("option");
+            opt.value = s.snapshotId;
+            opt.textContent = `${formatDatePretty(s.snapshotDate)} (${s.rowCount})`;
+            sel.appendChild(opt);
+          });
+        } else {
           const opt = document.createElement("option");
-          opt.value = s.snapshotId;
-          opt.textContent = `${formatDatePretty(s.snapshotDate)} (${s.rowCount})`;
+          opt.value = "";
+          opt.textContent = "No snapshots found";
           sel.appendChild(opt);
-        });
+        }
       }
 
       async function loadRows() {
         const snapshotId = document.getElementById("snapshots").value;
+
+        if (!snapshotId) {
+          document.getElementById("meta").textContent = "No snapshot selected.";
+          document.getElementById("rows").innerHTML = "";
+          return;
+        }
+
         const brand = document.getElementById("brand").value || "";
         const itemClass = document.getElementById("itemClass").value || "";
         const search = document.getElementById("search").value || "";
-        
+
         const qs = new URLSearchParams({
           page: String(page),
           pageSize: String(pageSize),
@@ -87,7 +106,11 @@
           sort: "difference_desc"
         });
 
-        const res = await fetch(`${API_BASE}/snapshots/${snapshotId}/rows?` + qs.toString());
+        const res = await fetch(`${API_BASE}/snapshots/${snapshotId}/rows?` + qs.toString(), {
+          headers: { "Accept": "application/json" }
+        });
+        if (!res.ok) throw new Error(`rows failed (${res.status})`);
+
         const data = await res.json();
 
         document.getElementById("meta").textContent =
@@ -95,134 +118,167 @@
 
         const tbody = document.getElementById("rows");
         tbody.innerHTML = "";
+
         (data.rows || []).forEach(r => {
           const tr = document.createElement("tr");
-          
-        tr.innerHTML = `
-          <td>${r.brand || ""}</td>
-          <td>${r.item || ""}</td>
-          <td>${r.item_name || ""}</td>
-          <td>${r.item_class || ""}</td>
-          <td class="num">${r.netsuite_total ?? ""}</td>
-          <td class="num">${r.snap_total ?? ""}</td>
-          <td class="num" style="font-weight:700;color:${r.difference === 0 ? '#15803d' : '#b91c1c'};">${r.difference ?? ""}</td>
-          `;
-
+          tr.innerHTML =
+            `<td>${r.brand || ""}</td>` +
+            `<td>${r.item || ""}</td>` +
+            `<td>${r.item_name || ""}</td>` +
+            `<td>${r.item_class || ""}</td>` +
+            `<td class="num">${r.netsuite_total ?? ""}</td>` +
+            `<td class="num">${r.snap_total ?? ""}</td>` +
+            `<td class="num" style="font-weight:700;color:${r.difference === 0 ? "#15803d" : "#b91c1c"};">${r.difference ?? ""}</td>`;
           tbody.appendChild(tr);
         });
       }
 
-    async function startExport() {
-    const snapshotId = document.getElementById("snapshots").value;
-    const brand = document.getElementById("brand").value || "";
-    const itemClass = document.getElementById("itemClass").value || "";
-    const search = document.getElementById("search").value || "";
+      async function startExport() {
+        const snapshotId = document.getElementById("snapshots").value;
+        if (!snapshotId) return;
 
-    const statusEl = document.getElementById("exportStatus");
-    statusEl.textContent = "Export: starting…";
+        const brand = document.getElementById("brand").value || "";
+        const itemClass = document.getElementById("itemClass").value || "";
+        const search = document.getElementById("search").value || "";
 
-    let jobId = null;
+        const statusEl = document.getElementById("exportStatus");
+        const btn = document.getElementById("export");
 
-    try {
-    const res = await fetch(`${API_BASE}/exports`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify({
-        snapshotId,
-        format: "xlsx",
-        filters: { brand, itemClass, search }
-      })
-    });
+        // Stop any existing poll loop (prevents infinite loops)
+        if (exportPoll) {
+          clearInterval(exportPoll);
+          exportPoll = null;
+        }
 
-    const postText = await res.text();
-    console.log("POST /exports status:", res.status, postText);
+        btn.disabled = true;
 
-    if (!res.ok) {
-      statusEl.textContent = `Export: POST failed (${res.status})`;
-      return;
-    }
+        try {
+          statusEl.textContent = "Export: starting…";
 
-    const postJson = postText ? JSON.parse(postText) : {};
-    jobId = postJson.jobId;
+          const res = await fetch(`${API_BASE}/exports`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify({
+              snapshotId,
+              format: "xlsx",
+              filters: { brand, itemClass, search }
+            })
+          });
 
-    if (!jobId) {
-      statusEl.textContent = "Export: no jobId returned";
-      return;
-    }
+          const text = await res.text();
 
-    statusEl.textContent = "Export: queued";
-  } catch (e) {
-    console.error("Export POST error:", e);
-    statusEl.textContent = "Export: POST error — " + (e.message || e);
-    return;
-  }
+          if (!res.ok) {
+            statusEl.textContent = `Export: POST failed (${res.status})`;
+            btn.disabled = false;
+            return;
+          }
 
-    let polls = 0;
-    const maxPolls = 60; // 60 * 2s = 2 minutes
+          const data = text ? JSON.parse(text) : {};
+          const jobId = data.jobId;
 
-    exportPoll = setInterval(async () => {
-    polls++;
-    if (polls > maxPolls) {
-    clearInterval(exportPoll);
-    statusEl.textContent = "Export: still queued after 2 minutes (backend worker?)";
-    return;
-    }
+          // If backend returns an immediate downloadUrl, show it.
+          if (data.downloadUrl) {
+            statusEl.textContent = "Export: done — ";
+            const a = document.createElement("a");
+            a.href = data.downloadUrl;
+            a.textContent = "Download";
+            a.target = "_blank";
+            statusEl.appendChild(a);
+            btn.disabled = false;
+            return;
+          }
 
-    // ... existing poll logic ...
-    }, 2000);
+          if (!jobId) {
+            statusEl.textContent = "Export: no jobId returned";
+            btn.disabled = false;
+            return;
+          }
 
-  if (exportPoll) clearInterval(exportPoll);
+          statusEl.textContent = "Export: queued";
 
-  exportPoll = setInterval(async () => {
-    try {
-      const r = await fetch(`${API_BASE}/exports/${jobId}`, {
-        headers: { "Accept": "application/json" }
-      });
+          let polls = 0;
+          const maxPolls = 60; // ~2 minutes
 
-      const text = await r.text();
-      console.log("GET /exports/" + jobId + " status:", r.status, text);
+          exportPoll = setInterval(async () => {
+            polls++;
 
-      if (!r.ok) {
-        statusEl.textContent = `Export: status failed (${r.status})`;
-        return;
-      }
+            // timeout
+            if (polls > maxPolls) {
+              clearInterval(exportPoll);
+              exportPoll = null;
+              btn.disabled = false;
+              statusEl.textContent = "Export timeout";
+              return;
+            }
 
-      const s = text ? JSON.parse(text) : {};
-      statusEl.textContent = "Export: " + (s.status || "(no status)");
+            try {
+              const r = await fetch(`${API_BASE}/exports/${jobId}`, {
+                headers: { "Accept": "application/json" }
+              });
 
-      if (s.status === "done") {
-        clearInterval(exportPoll);
-        if (s.downloadUrl) {
-          const a = document.createElement("a");
-          a.href = s.downloadUrl;
-          a.textContent = "Download";
-          a.target = "_blank";
-          statusEl.appendChild(document.createTextNode(" — "));
-          statusEl.appendChild(a);
-        } else {
-          statusEl.appendChild(document.createTextNode(" (no downloadUrl)"));
+              const t = await r.text();
+              if (!r.ok) return;
+
+              const s = t ? JSON.parse(t) : {};
+              statusEl.textContent = "Export: " + (s.status || "");
+
+              if (s.status === "done") {
+                clearInterval(exportPoll);
+                exportPoll = null;
+                btn.disabled = false;
+
+                statusEl.textContent = "Export: done — ";
+                if (s.downloadUrl) {
+                  const a = document.createElement("a");
+                  a.href = s.downloadUrl;
+                  a.textContent = "Download";
+                  a.target = "_blank";
+                  statusEl.appendChild(a);
+                } else {
+                  statusEl.appendChild(document.createTextNode("(no downloadUrl)"));
+                }
+              }
+
+              if (s.status === "failed") {
+                clearInterval(exportPoll);
+                exportPoll = null;
+                btn.disabled = false;
+                statusEl.textContent = "Export failed";
+              }
+            } catch (e) {
+              // keep polling; transient errors happen
+            }
+          }, 2000);
+
+        } catch (e) {
+          statusEl.textContent = "Export error";
+          btn.disabled = false;
         }
       }
 
-      if (s.status === "failed") {
-        clearInterval(exportPoll);
-        statusEl.textContent = "Export: failed — " + (s.error || "");
-      }
-    } catch (e) {
-      console.error("Export poll error:", e);
-      statusEl.textContent = "Export: poll error — " + (e.message || e);
-    }
-  }, 2000);
-}
+      document.getElementById("refresh").addEventListener("click", () => {
+        page = 1;
+        loadRows();
+      });
 
-
-      document.getElementById("refresh").addEventListener("click", () => { page = 1; loadRows(); });
       document.getElementById("export").addEventListener("click", startExport);
-      document.getElementById("snapshots").addEventListener("change", () => { page = 1; loadRows(); });
+
+      document.getElementById("snapshots").addEventListener("change", () => {
+        page = 1;
+        loadRows();
+      });
 
       (async () => {
-        await loadSnapshots();
-        await loadRows();
+        try {
+          console.log("Init starting...");
+          await loadSnapshots();
+          await loadRows();
+          console.log("Init finished OK");
+        } catch (e) {
+          console.error("Init error:", e);
+          document.getElementById("meta").textContent =
+            "Init failed: " + (e.message || e);
+        }
       })();
     </script>
   </body>

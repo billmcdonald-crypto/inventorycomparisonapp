@@ -8,7 +8,7 @@
       table { border-collapse: collapse; width: 100%; }
       th, td { border: 1px solid #ddd; padding: 6px; }
       th { background: #f3f3f3; }
-      .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
       input, select, button { padding: 6px; }
       .num { text-align: center; }
     </style>
@@ -22,7 +22,7 @@
       <input id="itemClass" placeholder="Item Class" />
       <input id="search" placeholder="Search item/name" />
       <button id="refresh">Refresh</button>
-      <button id="export">Export (async)</button>
+      <button id="export">Export CSV</button>
       <span id="exportStatus"></span>
     </div>
 
@@ -45,9 +45,6 @@
 
       let page = 1;
       const pageSize = 100;
-
-      // IMPORTANT: declare exportPoll only once
-      let exportPoll = null;
 
       function formatDatePretty(isoDate) {
         if (!isoDate) return "";
@@ -133,7 +130,7 @@
         });
       }
 
-      async function startExport() {
+      async function exportCsv() {
         const snapshotId = document.getElementById("snapshots").value;
         if (!snapshotId) return;
 
@@ -144,114 +141,49 @@
         const statusEl = document.getElementById("exportStatus");
         const btn = document.getElementById("export");
 
-        // Stop any existing poll loop (prevents infinite loops)
-        if (exportPoll) {
-          clearInterval(exportPoll);
-          exportPoll = null;
-        }
-
         btn.disabled = true;
 
         try {
-          statusEl.textContent = "Export: starting…";
+          statusEl.textContent = "Export: downloading…";
 
-          const res = await fetch(`${API_BASE}/exports`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Accept": "application/json" },
-            body: JSON.stringify({
-              snapshotId,
-              format: "xlsx",
-              filters: { brand, itemClass, search }
-            })
+          // This MUST match your new Function route: GET /api/export
+          const qs = new URLSearchParams({
+            snapshotId,
+            brand,
+            itemClass,
+            search,
+            sort: "difference_desc"
           });
 
-          const text = await res.text();
+          const res = await fetch(`${API_BASE}/export?` + qs.toString(), {
+            method: "GET"
+          });
 
           if (!res.ok) {
-            statusEl.textContent = `Export: POST failed (${res.status})`;
+            statusEl.textContent = `Export failed (${res.status})`;
             btn.disabled = false;
             return;
           }
 
-          const data = text ? JSON.parse(text) : {};
-          const jobId = data.jobId;
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
 
-          // If backend returns an immediate downloadUrl, show it.
-          if (data.downloadUrl) {
-            statusEl.textContent = "Export: done — ";
-            const a = document.createElement("a");
-            a.href = data.downloadUrl;
-            a.textContent = "Download";
-            a.target = "_blank";
-            statusEl.appendChild(a);
-            btn.disabled = false;
-            return;
-          }
+          const a = document.createElement("a");
+          a.href = url;
 
-          if (!jobId) {
-            statusEl.textContent = "Export: no jobId returned";
-            btn.disabled = false;
-            return;
-          }
+          // Fallback filename. Server also sets Content-Disposition.
+          a.download = `inventory-export-${new Date().toISOString().slice(0, 10)}.csv`;
 
-          statusEl.textContent = "Export: queued";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
 
-          let polls = 0;
-          const maxPolls = 60; // ~2 minutes
-
-          exportPoll = setInterval(async () => {
-            polls++;
-
-            // timeout
-            if (polls > maxPolls) {
-              clearInterval(exportPoll);
-              exportPoll = null;
-              btn.disabled = false;
-              statusEl.textContent = "Export timeout";
-              return;
-            }
-
-            try {
-              const r = await fetch(`${API_BASE}/exports/${jobId}`, {
-                headers: { "Accept": "application/json" }
-              });
-
-              const t = await r.text();
-              if (!r.ok) return;
-
-              const s = t ? JSON.parse(t) : {};
-              statusEl.textContent = "Export: " + (s.status || "");
-
-              if (s.status === "done") {
-                clearInterval(exportPoll);
-                exportPoll = null;
-                btn.disabled = false;
-
-                statusEl.textContent = "Export: done — ";
-                if (s.downloadUrl) {
-                  const a = document.createElement("a");
-                  a.href = s.downloadUrl;
-                  a.textContent = "Download";
-                  a.target = "_blank";
-                  statusEl.appendChild(a);
-                } else {
-                  statusEl.appendChild(document.createTextNode("(no downloadUrl)"));
-                }
-              }
-
-              if (s.status === "failed") {
-                clearInterval(exportPoll);
-                exportPoll = null;
-                btn.disabled = false;
-                statusEl.textContent = "Export failed";
-              }
-            } catch (e) {
-              // keep polling; transient errors happen
-            }
-          }, 2000);
-
+          statusEl.textContent = "Export: done";
         } catch (e) {
+          console.error("Export error:", e);
           statusEl.textContent = "Export error";
+        } finally {
           btn.disabled = false;
         }
       }
@@ -261,7 +193,7 @@
         loadRows();
       });
 
-      document.getElementById("export").addEventListener("click", startExport);
+      document.getElementById("export").addEventListener("click", exportCsv);
 
       document.getElementById("snapshots").addEventListener("change", () => {
         page = 1;
