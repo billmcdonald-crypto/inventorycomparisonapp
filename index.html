@@ -11,6 +11,7 @@
       .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
       input, select, button { padding: 6px; }
       .num { text-align: center; }
+      .mode { display: flex; align-items: center; gap: 6px; }
     </style>
   </head>
   <body>
@@ -21,6 +22,17 @@
       <input id="brand" placeholder="Brand" />
       <input id="itemClass" placeholder="Item Class" />
       <input id="search" placeholder="Search item/name" />
+
+      <!-- Compare mode -->
+      <label class="mode">
+        <input type="radio" name="compareMode" value="onHand" checked />
+        On Hand
+      </label>
+      <label class="mode">
+        <input type="radio" name="compareMode" value="available" />
+        Available to Sell
+      </label>
+
       <button id="refresh">Refresh</button>
       <button id="export">Export CSV</button>
       <span id="exportStatus"></span>
@@ -40,10 +52,10 @@
     <script>
       console.log("script loaded ok");
 
-      // Function App base URL (direct)
-      const API_BASE = "https://inventorycomparisonfunctionapp-hrbyg5exhtd3addg.canadacentral-01.azurewebsites.net/api";
-        //const API_BASE = "/api";
-
+      // Prefer SWA attached API
+      const API_BASE = "/api";
+      // For standalone Function App testing, uncomment and comment out the line above:
+      // const API_BASE = "https://inventorycomparisonfunctionapp-hrbyg5exhtd3addg.canadacentral-01.azurewebsites.net/api";
 
       let page = 1;
       const pageSize = 100;
@@ -56,6 +68,11 @@
           day: "2-digit",
           year: "numeric"
         });
+      }
+
+      function getCompareMode() {
+        const el = document.querySelector('input[name="compareMode"]:checked');
+        return el ? el.value : "onHand";
       }
 
       async function loadSnapshots() {
@@ -102,6 +119,7 @@
           brand,
           itemClass,
           search,
+          compareMode: getCompareMode(),  // ✅ include mode for backend sorting/fields
           sort: "difference_desc"
         });
 
@@ -119,6 +137,9 @@
         tbody.innerHTML = "";
 
         (data.rows || []).forEach(r => {
+          const diff = (r.difference ?? 0);
+          const diffColor = diff === 0 ? "#15803d" : (diff > 0 ? "#b45309" : "#b91c1c");
+
           const tr = document.createElement("tr");
           tr.innerHTML =
             `<td>${r.brand || ""}</td>` +
@@ -127,7 +148,7 @@
             `<td>${r.item_class || ""}</td>` +
             `<td class="num">${r.netsuite_total ?? ""}</td>` +
             `<td class="num">${r.snap_total ?? ""}</td>` +
-            `<td class="num" style="font-weight:700;color:${r.difference === 0 ? "#15803d" : "#b91c1c"};">${r.difference ?? ""}</td>`;
+            `<td class="num" style="font-weight:700;color:${diffColor};">${r.difference ?? ""}</td>`;
           tbody.appendChild(tr);
         });
       }
@@ -148,12 +169,12 @@
         try {
           statusEl.textContent = "Export: downloading…";
 
-          // This MUST match your new Function route: GET /api/export
           const qs = new URLSearchParams({
             snapshotId,
             brand,
             itemClass,
             search,
+            compareMode: getCompareMode(), // ✅ include mode for backend export
             sort: "difference_desc"
           });
 
@@ -174,7 +195,7 @@
           a.href = url;
 
           // Fallback filename. Server also sets Content-Disposition.
-          a.download = `inventory-export-${new Date().toISOString().slice(0, 10)}.csv`;
+          a.download = `inventory-export-${getCompareMode()}-${new Date().toISOString().slice(0, 10)}.csv`;
 
           document.body.appendChild(a);
           a.click();
@@ -200,6 +221,10 @@
       document.getElementById("snapshots").addEventListener("change", () => {
         page = 1;
         loadRows();
+      });
+
+      document.querySelectorAll('input[name="compareMode"]').forEach(r => {
+        r.addEventListener("change", () => { page = 1; loadRows(); });
       });
 
       (async () => {
