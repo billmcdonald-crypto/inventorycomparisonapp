@@ -1,332 +1,266 @@
 <!doctype html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Inventory Comparison</title>
-    <style>
-      body { font-family: system-ui; padding: 16px; }
-      table { border-collapse: collapse; width: 100%; }
-      th, td { border: 1px solid #ddd; padding: 6px; }
-      th { background: #f3f3f3; vertical-align: middle; }
-      .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
-      input, select, button { padding: 6px; }
-      .num { text-align: center; }
-      .mode { display: flex; align-items: center; gap: 6px; }
-      .th-btn {
-        cursor: pointer;
-        user-select: none;
-        display: inline-flex;
-        gap: 6px;
-        align-items: center;
-      }
-      .sort-ind { font-size: 11px; opacity: 0.7; }
-      .filter-row th { background: #fafafa; }
-      .filter-input {
-        width: 100%;
-        box-sizing: border-box;
-        padding: 5px;
-      }
-      .muted { color: #666; font-size: 12px; }
-    </style>
-  </head>
-  <body>
-    <h2>Inventory Comparison</h2>
+<head>
+  <meta charset="utf-8" />
+  <title>Inventory Comparison</title>
 
-    <div class="row">
-      <select id="snapshots"></select>
+  <style>
+    body { font-family: system-ui; padding: 16px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 6px; }
+    th { background: #f3f3f3; vertical-align: middle; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+    input, select, button { padding: 6px; }
+    .num { text-align: center; }
+    .mode { display: flex; align-items: center; gap: 6px; }
+    .th-btn {
+      cursor: pointer;
+      user-select: none;
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .sort-ind { font-size: 11px; opacity: 0.7; }
+    .filter-row th { background: #fafafa; }
+    .filter-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 5px;
+    }
+    .muted { color: #666; font-size: 12px; }
+  </style>
+</head>
 
-      <label class="mode">
-        <input type="radio" name="compareMode" value="onHand" checked />
-        On Hand
-      </label>
-      <label class="mode">
-        <input type="radio" name="compareMode" value="available" />
-        Available to Sell
-      </label>
+<body>
 
-      <button id="refresh">Refresh</button>
-      <button id="clearFilters">Clear Filters</button>
-      <button id="export">Export CSV</button>
-      <span id="exportStatus"></span>
-    </div>
+<h2>Inventory Comparison</h2>
 
-    <div id="meta" class="muted"></div>
+<div class="row">
+  <select id="snapshots"></select>
 
-    <table>
-      <thead>
-        <tr>
-          <th><span class="th-btn" data-sort="brand">Brand <span class="sort-ind" id="si-brand"></span></span></th>
-          <th><span class="th-btn" data-sort="item">Item <span class="sort-ind" id="si-item"></span></span></th>
-          <th><span class="th-btn" data-sort="item_name">Item Name <span class="sort-ind" id="si-item_name"></span></span></th>
-          <th><span class="th-btn" data-sort="item_class">Class <span class="sort-ind" id="si-item_class"></span></span></th>
-          <th><span class="th-btn" data-sort="netsuite">NetSuite <span class="sort-ind" id="si-netsuite"></span></span></th>
-          <th><span class="th-btn" data-sort="snap">Snap <span class="sort-ind" id="si-snap"></span></span></th>
-          <th><span class="th-btn" data-sort="difference">Diff <span class="sort-ind" id="si-difference"></span></span></th>
-        </tr>
+  <label class="mode">
+    <input type="radio" name="compareMode" value="onHand" checked />
+    On Hand
+  </label>
 
-        <tr class="filter-row">
-          <th><input id="fBrand" class="filter-input" placeholder="Filter brand…" /></th>
-          <th><input id="fItem" class="filter-input" placeholder="Filter item/name…" /></th>
-          <th></th>
-          <th><input id="fClass" class="filter-input" placeholder="Filter class…" /></th>
-          <th></th>
-          <th></th>
-          <th></th>
-        </tr>
-      </thead>
+  <label class="mode">
+    <input type="radio" name="compareMode" value="available" />
+    Available to Sell
+  </label>
 
-      <tbody id="rows"></tbody>
-    </table>
+  <label class="mode">
+    <input type="checkbox" id="onlyDiff" />
+    Only show differences
+  </label>
 
-    <script>
-      console.log("script loaded ok");
+  <button id="refresh">Refresh</button>
+  <button id="clearFilters">Clear Filters</button>
+  <button id="export">Export CSV</button>
+  <span id="exportStatus"></span>
+</div>
 
-      const API_BASE = "/api";
+<div id="meta" class="muted"></div>
 
-      let page = 1;
-      const pageSize = 100;
+<table>
+  <thead>
+    <tr>
+      <th><span class="th-btn" data-sort="brand">Brand <span id="si-brand" class="sort-ind"></span></span></th>
+      <th><span class="th-btn" data-sort="item">Item <span id="si-item" class="sort-ind"></span></span></th>
+      <th><span class="th-btn" data-sort="item_name">Item Name <span id="si-item_name" class="sort-ind"></span></span></th>
+      <th><span class="th-btn" data-sort="item_class">Class <span id="si-item_class" class="sort-ind"></span></span></th>
+      <th><span class="th-btn" data-sort="netsuite">NetSuite <span id="si-netsuite" class="sort-ind"></span></span></th>
+      <th><span class="th-btn" data-sort="snap">Snap <span id="si-snap" class="sort-ind"></span></span></th>
+      <th><span class="th-btn" data-sort="difference">Diff <span id="si-difference" class="sort-ind"></span></span></th>
+    </tr>
 
-      // Sorting state
-      let sortField = "difference";
-      let sortDir = "desc";
+    <tr class="filter-row">
+      <th><input id="fBrand" class="filter-input" placeholder="Filter brand…" /></th>
+      <th><input id="fItem" class="filter-input" placeholder="Filter item/name…" /></th>
+      <th></th>
+      <th><input id="fClass" class="filter-input" placeholder="Filter class…" /></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
 
-      function debounce(fn, ms) {
-        let t;
-        return function() {
-          const args = arguments;
-          clearTimeout(t);
-          t = setTimeout(() => fn.apply(null, args), ms);
-        };
-      }
+  <tbody id="rows"></tbody>
+</table>
 
-      function formatDatePretty(isoDate) {
-        if (!isoDate) return "";
-        const d = new Date(isoDate);
-        return d.toLocaleDateString("en-US", {
-          month: "short",
-          day: "2-digit",
-          year: "numeric"
-        });
-      }
+<script>
+const API_BASE = "/api";
 
-      function getCompareMode() {
-        const el = document.querySelector('input[name="compareMode"]:checked');
-        return el ? el.value : "onHand";
-      }
+let page = 1;
+const pageSize = 100;
 
-      function setSort(field) {
-        if (sortField === field) {
-          sortDir = (sortDir === "asc") ? "desc" : "asc";
-        } else {
-          sortField = field;
-          sortDir = "desc";
-        }
-        page = 1;
-        updateSortIndicators();
-        loadRows();
-      }
+let sortField = "difference";
+let sortDir = "desc";
 
-      function updateSortIndicators() {
-        const ids = ["brand","item","item_name","item_class","netsuite","snap","difference"];
-        ids.forEach(id => {
-          const el = document.getElementById("si-" + id);
-          if (!el) return;
-          el.textContent = (sortField === id) ? (sortDir === "asc" ? "▲" : "▼") : "";
-        });
-      }
+function debounce(fn, ms) {
+  let t;
+  return function() {
+    clearTimeout(t);
+    t = setTimeout(() => fn(), ms);
+  };
+}
 
-      function clearAllFilters() {
-        document.getElementById("fBrand").value = "";
-        document.getElementById("fItem").value = "";
-        document.getElementById("fClass").value = "";
-        page = 1;
-        loadRows();
-      }
+function getCompareMode() {
+  const el = document.querySelector('input[name="compareMode"]:checked');
+  return el ? el.value : "onHand";
+}
 
-      async function loadSnapshots() {
-        const res = await fetch(`${API_BASE}/snapshots`, {
-          headers: { "Accept": "application/json" }
-        });
-        if (!res.ok) throw new Error(`snapshots failed (${res.status})`);
+function updateSortIndicators() {
+  const ids = ["brand","item","item_name","item_class","netsuite","snap","difference"];
+  ids.forEach(id => {
+    const el = document.getElementById("si-" + id);
+    if (!el) return;
+    el.textContent = (sortField === id) ? (sortDir === "asc" ? "▲" : "▼") : "";
+  });
+}
 
-        const data = await res.json();
-        const sel = document.getElementById("snapshots");
-        sel.innerHTML = "";
+function setSort(field) {
+  if (sortField === field) {
+    sortDir = sortDir === "asc" ? "desc" : "asc";
+  } else {
+    sortField = field;
+    sortDir = "desc";
+  }
+  page = 1;
+  updateSortIndicators();
+  loadRows();
+}
 
-        if (data && data.length) {
-          data.forEach(s => {
-            const opt = document.createElement("option");
-            opt.value = s.snapshotId;
-            opt.textContent = `${formatDatePretty(s.snapshotDate)} (${s.rowCount})`;
-            sel.appendChild(opt);
-          });
-        } else {
-          const opt = document.createElement("option");
-          opt.value = "";
-          opt.textContent = "No snapshots found";
-          sel.appendChild(opt);
-        }
-      }
+function clearAllFilters() {
+  document.getElementById("fBrand").value = "";
+  document.getElementById("fItem").value = "";
+  document.getElementById("fClass").value = "";
+  page = 1;
+  loadRows();
+}
 
-      async function loadRows() {
-        const snapshotId = document.getElementById("snapshots").value;
+async function loadSnapshots() {
+  const res = await fetch(`${API_BASE}/snapshots`);
+  const data = await res.json();
+  const sel = document.getElementById("snapshots");
+  sel.innerHTML = "";
 
-        if (!snapshotId) {
-          document.getElementById("meta").textContent = "No snapshot selected.";
-          document.getElementById("rows").innerHTML = "";
-          return;
-        }
+  if (data && data.length) {
+    data.forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s.snapshotId;
+      opt.textContent = `${new Date(s.snapshotDate).toLocaleDateString()} (${s.rowCount})`;
+      sel.appendChild(opt);
+    });
+  } else {
+    const opt = document.createElement("option");
+    opt.textContent = "No snapshots found";
+    sel.appendChild(opt);
+  }
+}
 
-        // Pull filters directly from header inputs
-        const brand = document.getElementById("fBrand").value || "";
-        const itemClass = document.getElementById("fClass").value || "";
-        const search = document.getElementById("fItem").value || "";
+async function loadRows() {
+  const snapshotId = document.getElementById("snapshots").value;
+  if (!snapshotId) return;
 
-        const qs = new URLSearchParams({
-          page: String(page),
-          pageSize: String(pageSize),
-          brand,
-          itemClass,
-          search,
-          compareMode: getCompareMode(),
-          sort: `${sortField}_${sortDir}`
-        });
+  const brand = document.getElementById("fBrand").value || "";
+  const itemClass = document.getElementById("fClass").value || "";
+  const search = document.getElementById("fItem").value || "";
+  const onlyDiff = document.getElementById("onlyDiff").checked ? "1" : "0";
 
-        const res = await fetch(`${API_BASE}/snapshots/${snapshotId}/rows?` + qs.toString(), {
-          headers: { "Accept": "application/json" }
-        });
+  const qs = new URLSearchParams({
+    page,
+    pageSize,
+    brand,
+    itemClass,
+    search,
+    compareMode: getCompareMode(),
+    sort: `${sortField}_${sortDir}`,
+    onlyDiff
+  });
 
-        if (!res.ok) {
-          const txt = await res.text().catch(() => "");
-          throw new Error(`rows failed (${res.status}) ${txt}`);
-        }
+  const res = await fetch(`${API_BASE}/snapshots/${snapshotId}/rows?` + qs.toString());
+  const data = await res.json();
 
-        const data = await res.json();
+  document.getElementById("meta").textContent =
+    `Total rows: ${data.total} | Sort: ${sortField}_${sortDir} | Mode: ${getCompareMode()}`;
 
-        document.getElementById("meta").textContent =
-          `Total rows: ${data.total} | Page: ${data.page} | Sort: ${sortField}_${sortDir} | Mode: ${getCompareMode()}`;
+  const tbody = document.getElementById("rows");
+  tbody.innerHTML = "";
 
-        const tbody = document.getElementById("rows");
-        tbody.innerHTML = "";
+  (data.rows || []).forEach(r => {
+    const diff = r.difference ?? 0;
+    const diffColor = diff === 0 ? "#15803d" : (diff > 0 ? "#b45309" : "#b91c1c");
 
-        (data.rows || []).forEach(r => {
-          const diff = (r.difference ?? 0);
-          const diffColor = diff === 0 ? "#15803d" : (diff > 0 ? "#b45309" : "#b91c1c");
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      `<td>${r.brand || ""}</td>` +
+      `<td>${r.item || ""}</td>` +
+      `<td>${r.item_name || ""}</td>` +
+      `<td>${r.item_class || ""}</td>` +
+      `<td class="num">${r.netsuite_total ?? ""}</td>` +
+      `<td class="num">${r.snap_total ?? ""}</td>` +
+      `<td class="num" style="font-weight:700;color:${diffColor};">${diff}</td>`;
+    tbody.appendChild(tr);
+  });
+}
 
-          const tr = document.createElement("tr");
-          tr.innerHTML =
-            `<td>${r.brand || ""}</td>` +
-            `<td>${r.item || ""}</td>` +
-            `<td>${r.item_name || ""}</td>` +
-            `<td>${r.item_class || ""}</td>` +
-            `<td class="num">${r.netsuite_total ?? ""}</td>` +
-            `<td class="num">${r.snap_total ?? ""}</td>` +
-            `<td class="num" style="font-weight:700;color:${diffColor};">${r.difference ?? ""}</td>`;
-          tbody.appendChild(tr);
-        });
-      }
+async function exportCsv() {
+  const snapshotId = document.getElementById("snapshots").value;
+  if (!snapshotId) return;
 
-      async function exportCsv() {
-        const snapshotId = document.getElementById("snapshots").value;
-        if (!snapshotId) return;
+  const brand = document.getElementById("fBrand").value || "";
+  const itemClass = document.getElementById("fClass").value || "";
+  const search = document.getElementById("fItem").value || "";
+  const onlyDiff = document.getElementById("onlyDiff").checked ? "1" : "0";
 
-        // Use header filters for export too
-        const brand = document.getElementById("fBrand").value || "";
-        const itemClass = document.getElementById("fClass").value || "";
-        const search = document.getElementById("fItem").value || "";
+  const qs = new URLSearchParams({
+    snapshotId,
+    brand,
+    itemClass,
+    search,
+    compareMode: getCompareMode(),
+    sort: `${sortField}_${sortDir}`,
+    onlyDiff
+  });
 
-        const statusEl = document.getElementById("exportStatus");
-        const btn = document.getElementById("export");
+  const res = await fetch(`${API_BASE}/export?` + qs.toString());
+  const blob = await res.blob();
 
-        btn.disabled = true;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `inventory-export-${getCompareMode()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
-        try {
-          statusEl.textContent = "Export: downloading…";
+document.getElementById("refresh").addEventListener("click", () => { page = 1; loadRows(); });
+document.getElementById("clearFilters").addEventListener("click", clearAllFilters);
+document.getElementById("export").addEventListener("click", exportCsv);
+document.getElementById("snapshots").addEventListener("change", () => { page = 1; loadRows(); });
+document.getElementById("onlyDiff").addEventListener("change", () => { page = 1; loadRows(); });
 
-          const qs = new URLSearchParams({
-            snapshotId,
-            brand,
-            itemClass,
-            search,
-            compareMode: getCompareMode(),
-            sort: `${sortField}_${sortDir}`
-          });
+document.querySelectorAll('input[name="compareMode"]').forEach(r => {
+  r.addEventListener("change", () => { page = 1; loadRows(); });
+});
 
-          const res = await fetch(`${API_BASE}/export?` + qs.toString(), { method: "GET" });
+document.querySelectorAll(".th-btn").forEach(el => {
+  el.addEventListener("click", () => setSort(el.getAttribute("data-sort")));
+});
 
-          if (!res.ok) {
-            statusEl.textContent = `Export failed (${res.status})`;
-            btn.disabled = false;
-            return;
-          }
+const onFilterChange = debounce(() => { page = 1; loadRows(); }, 250);
+["fBrand", "fItem", "fClass"].forEach(id => {
+  document.getElementById(id).addEventListener("input", onFilterChange);
+});
 
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
+(async () => {
+  await loadSnapshots();
+  updateSortIndicators();
+  await loadRows();
+})();
+</script>
 
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `inventory-export-${getCompareMode()}-${new Date().toISOString().slice(0, 10)}.csv`;
-
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          URL.revokeObjectURL(url);
-
-          statusEl.textContent = "Export: done";
-        } catch (e) {
-          console.error("Export error:", e);
-          statusEl.textContent = "Export error";
-        } finally {
-          btn.disabled = false;
-        }
-      }
-
-      // Events
-      document.getElementById("refresh").addEventListener("click", () => {
-        page = 1;
-        loadRows();
-      });
-
-      document.getElementById("clearFilters").addEventListener("click", clearAllFilters);
-
-      document.getElementById("export").addEventListener("click", exportCsv);
-
-      document.getElementById("snapshots").addEventListener("change", () => {
-        page = 1;
-        loadRows();
-      });
-
-      document.querySelectorAll('input[name="compareMode"]').forEach(r => {
-        r.addEventListener("change", () => { page = 1; loadRows(); });
-      });
-
-      document.querySelectorAll(".th-btn").forEach(el => {
-        el.addEventListener("click", () => setSort(el.getAttribute("data-sort")));
-      });
-
-      const onFilterChange = debounce(() => {
-        page = 1;
-        loadRows();
-      }, 250);
-
-      ["fBrand", "fItem", "fClass"].forEach(id => {
-        document.getElementById(id).addEventListener("input", onFilterChange);
-      });
-
-      // Init
-      (async () => {
-        try {
-          console.log("Init starting...");
-          updateSortIndicators();
-          await loadSnapshots();
-          await loadRows();
-          console.log("Init finished OK");
-        } catch (e) {
-          console.error("Init error:", e);
-          document.getElementById("meta").textContent =
-            "Init failed: " + (e.message || e);
-        }
-      })();
-    </script>
-  </body>
+</body>
 </html>
