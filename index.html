@@ -35,8 +35,6 @@
     <div class="row">
       <select id="snapshots"></select>
 
-  
-      <!-- Compare mode -->
       <label class="mode">
         <input type="radio" name="compareMode" value="onHand" checked />
         On Hand
@@ -66,10 +64,9 @@
           <th><span class="th-btn" data-sort="difference">Diff <span class="sort-ind" id="si-difference"></span></span></th>
         </tr>
 
-        <!-- Column filter row (Phase 2) -->
         <tr class="filter-row">
           <th><input id="fBrand" class="filter-input" placeholder="Filter brand…" /></th>
-          <th><input id="fItem" class="filter-input" placeholder="Filter item…" /></th>
+          <th><input id="fItem" class="filter-input" placeholder="Filter item/name…" /></th>
           <th></th>
           <th><input id="fClass" class="filter-input" placeholder="Filter class…" /></th>
           <th></th>
@@ -89,11 +86,10 @@
       let page = 1;
       const pageSize = 100;
 
-      // Sorting state (Phase 1)
+      // Sorting state
       let sortField = "difference";
       let sortDir = "desc";
 
-      // Debounce helper for filters bill edit
       function debounce(fn, ms) {
         let t;
         return function() {
@@ -135,33 +131,14 @@
         ids.forEach(id => {
           const el = document.getElementById("si-" + id);
           if (!el) return;
-          if (sortField === id) {
-            el.textContent = (sortDir === "asc") ? "▲" : "▼";
-          } else {
-            el.textContent = "";
-          }
+          el.textContent = (sortField === id) ? (sortDir === "asc" ? "▲" : "▼") : "";
         });
       }
 
-
-    function clearAllFilters() {
-      document.getElementById("fBrand").value = "";
-      document.getElementById("fItem").value = "";
-      document.getElementById("fClass").value = "";
-
-      page = 1;
-      loadRows();
-      }
-
       function clearAllFilters() {
-        document.getElementById("brand").value = "";
-        document.getElementById("itemClass").value = "";
-        document.getElementById("search").value = "";
-
         document.getElementById("fBrand").value = "";
         document.getElementById("fItem").value = "";
         document.getElementById("fClass").value = "";
-
         page = 1;
         loadRows();
       }
@@ -200,7 +177,7 @@
           return;
         }
 
-        // Always pull from the top inputs (header filters sync into these)
+        // Pull filters directly from header inputs
         const brand = document.getElementById("fBrand").value || "";
         const itemClass = document.getElementById("fClass").value || "";
         const search = document.getElementById("fItem").value || "";
@@ -218,6 +195,7 @@
         const res = await fetch(`${API_BASE}/snapshots/${snapshotId}/rows?` + qs.toString(), {
           headers: { "Accept": "application/json" }
         });
+
         if (!res.ok) {
           const txt = await res.text().catch(() => "");
           throw new Error(`rows failed (${res.status}) ${txt}`);
@@ -226,7 +204,7 @@
         const data = await res.json();
 
         document.getElementById("meta").textContent =
-          `Total rows: ${data.total} | Page: ${data.page} | Sort: ${sortField} ${sortDir} | Mode: ${getCompareMode()}`;
+          `Total rows: ${data.total} | Page: ${data.page} | Sort: ${sortField}_${sortDir} | Mode: ${getCompareMode()}`;
 
         const tbody = document.getElementById("rows");
         tbody.innerHTML = "";
@@ -252,9 +230,10 @@
         const snapshotId = document.getElementById("snapshots").value;
         if (!snapshotId) return;
 
-        const brand = document.getElementById("brand").value || "";
-        const itemClass = document.getElementById("itemClass").value || "";
-        const search = document.getElementById("search").value || "";
+        // Use header filters for export too
+        const brand = document.getElementById("fBrand").value || "";
+        const itemClass = document.getElementById("fClass").value || "";
+        const search = document.getElementById("fItem").value || "";
 
         const statusEl = document.getElementById("exportStatus");
         const btn = document.getElementById("export");
@@ -321,14 +300,11 @@
         r.addEventListener("change", () => { page = 1; loadRows(); });
       });
 
-      // Sort header clicks (Phase 1)
       document.querySelectorAll(".th-btn").forEach(el => {
         el.addEventListener("click", () => setSort(el.getAttribute("data-sort")));
       });
 
-      // Column filters (Phase 2) -> debounce + sync to top inputs
       const onFilterChange = debounce(() => {
-        syncHeaderFiltersToTop();
         page = 1;
         loadRows();
       }, 250);
@@ -337,21 +313,7 @@
         document.getElementById(id).addEventListener("input", onFilterChange);
       });
 
-      // Also if user types in the top inputs, apply and refresh
-      const onTopFilterChange = debounce(() => {
-        // sync top -> header (so UI stays consistent)
-        document.getElementById("fBrand").value = document.getElementById("brand").value || "";
-        document.getElementById("fClass").value = document.getElementById("itemClass").value || "";
-        document.getElementById("fItem").value = document.getElementById("search").value || "";
-        page = 1;
-        loadRows();
-      }, 300);
-
-      ["brand", "itemClass", "search"].forEach(id => {
-        document.getElementById(id).addEventListener("input", onTopFilterChange);
-      });
-
-      // Init f
+      // Init
       (async () => {
         try {
           console.log("Init starting...");
