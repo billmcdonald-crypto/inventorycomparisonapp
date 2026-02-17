@@ -35,11 +35,7 @@
     <div class="row">
       <select id="snapshots"></select>
 
-      <!-- Top filters (kept) -->
-      <input id="brand" placeholder="Brand" />
-      <input id="itemClass" placeholder="Item Class" />
-      <input id="search" placeholder="Search item/name" />
-
+  
       <!-- Compare mode -->
       <label class="mode">
         <input type="radio" name="compareMode" value="onHand" checked />
@@ -147,20 +143,14 @@
         });
       }
 
-      // Keep top filters in sync with header filters (Phase 2)
-      function syncHeaderFiltersToTop() {
-        const fb = document.getElementById("fBrand").value || "";
-        const fi = document.getElementById("fItem").value || "";
-        const fc = document.getElementById("fClass").value || "";
 
-        // Brand maps to brand
-        document.getElementById("brand").value = fb;
+    function clearAllFilters() {
+      document.getElementById("fBrand").value = "";
+      document.getElementById("fItem").value = "";
+      document.getElementById("fClass").value = "";
 
-        // Class maps to itemClass
-        document.getElementById("itemClass").value = fc;
-
-        // Item filter maps to "search" (item or name)
-        document.getElementById("search").value = fi;
+      page = 1;
+      loadRows();
       }
 
       function clearAllFilters() {
@@ -211,9 +201,9 @@
         }
 
         // Always pull from the top inputs (header filters sync into these)
-        const brand = document.getElementById("brand").value || "";
-        const itemClass = document.getElementById("itemClass").value || "";
-        const search = document.getElementById("search").value || "";
+        const brand = document.getElementById("fBrand").value || "";
+        const itemClass = document.getElementById("fClass").value || "";
+        const search = document.getElementById("fItem").value || "";
 
         const qs = new URLSearchParams({
           page: String(page),
