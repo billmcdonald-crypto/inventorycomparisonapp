@@ -29,6 +29,35 @@
       padding: 5px;
     }
     .muted { color: #666; font-size: 12px; }
+
+    /* =========================
+       NEW: SKU + stacked headers
+       ========================= */
+
+    /* Keep SKU from wrapping and keep a usable width */
+    th.col-sku, td.col-sku {
+      white-space: nowrap;
+      word-break: normal;
+      overflow-wrap: normal;
+      min-width: 160px; /* tweak to taste */
+    }
+
+    /* Optional: make Brand/Season/Style also not wrap (feels nicer) */
+    th.col-brand, td.col-brand,
+    th.col-season, td.col-season,
+    th.col-style, td.col-style {
+      white-space: nowrap;
+    }
+
+    /* Stacked inventory header lines */
+    .th-stack {
+      line-height: 1.05;
+      text-align: center;
+      white-space: nowrap; /* keep each line from wrapping mid-word */
+    }
+    .th-stack .l1 { font-weight: 700; }
+    .th-stack .l2 { font-weight: 600; font-size: 12px; opacity: 0.9; }
+    .th-stack .l3 { font-weight: 600; font-size: 12px; opacity: 0.9; }
   </style>
 </head>
 
@@ -122,6 +151,62 @@ function toNumberOrNull(v) {
   return isNaN(n) ? null : n;
 }
 
+/* =========================
+   NEW: stacked label parsing
+   =========================
+   Turns:
+     "Ashworth B2B On Hand"  -> {l1:"Ashworth", l2:"B2B", l3:"On-Hand"}
+     "NetSuite Total On Hand"-> {l1:"NetSuite", l2:"Total", l3:"On-Hand"}
+     "Diff_OH"               -> {l1:"Diff", l2:"", l3:"On-Hand"} (mode-aware)
+*/
+function getStackedHeaderParts(label, mode) {
+  const s = String(label || "");
+  const metric = (mode === "available") ? "ATS" : "On Hand";
+
+  // Diff columns: show Diff + metric
+  if (s === "Diff_OH" || s === "Diff_ATS") {
+    return {
+      l1: "Diff",
+      l2: "",
+      l3: (mode === "available") ? "ATS" : "On-Hand"
+    };
+  }
+
+  // If it contains the metric phrase, split around it.
+  const metricPos = s.indexOf(metric);
+  if (metricPos >= 0) {
+    const left = s.substring(0, metricPos).trim();      // e.g. "Ashworth B2B" or "NetSuite Total"
+    const right = s.substring(metricPos).trim();        // e.g. "On Hand" or "ATS"
+    const leftParts = left.split(/\s+/);
+
+    return {
+      l1: leftParts[0] || s,
+      l2: leftParts.slice(1).join(" ") || "",
+      l3: right.replace("On Hand", "On-Hand") // pretty
+    };
+  }
+
+  // Fallback: keep original as one-line in l1
+  return { l1: s, l2: "", l3: "" };
+}
+
+function renderHeaderLabel(colLabel, mode) {
+  // Base columns stay one-line.
+  if (colLabel === "Brand" || colLabel === "Season" || colLabel === "Style" || colLabel === "SKU") {
+    return escapeHtml(colLabel);
+  }
+
+  // Inventory columns -> stacked
+  const p = getStackedHeaderParts(colLabel, mode);
+  return (
+    '<div class="th-stack">' +
+      '<div class="l1">' + escapeHtml(p.l1) + '</div>' +
+      (p.l2 ? '<div class="l2">' + escapeHtml(p.l2) + '</div>' : '<div class="l2"></div>') +
+      (p.l3 ? '<div class="l3">' + escapeHtml(p.l3) + '</div>' : '<div class="l3"></div>') +
+    '</div>'
+  );
+}
+
 function buildColumnsFromRows(rowsNormalized) {
   const mode = getCompareMode();              // "onHand" or "available"
   const diffKey = getDiffKeyForMode(mode);    // "Diff_OH" or "Diff_ATS"
@@ -134,8 +219,6 @@ function buildColumnsFromRows(rowsNormalized) {
   });
 
   // Decide which inventory keys to show based on mode.
-  // OnHand: show "*On Hand*" keys + Diff_OH (and hide ATS stuff)
-  // Available: show "*ATS*" keys + Diff_ATS (and hide On Hand stuff)
   function keyMatchesMode(k) {
     const kk = String(k || "");
 
@@ -145,13 +228,8 @@ function buildColumnsFromRows(rowsNormalized) {
     const hasOnHand = kk.indexOf("On Hand") >= 0;
     const hasATS = kk.indexOf("ATS") >= 0;
 
-    if (mode === "available") {
-      // show ATS columns (plus totals ATS)
-      return hasATS;
-    } else {
-      // show On Hand columns (plus totals On Hand)
-      return hasOnHand;
-    }
+    if (mode === "available") return hasATS;
+    return hasOnHand;
   }
 
   const allKeys = Object.keys(keySet).filter(keyMatchesMode);
@@ -182,14 +260,14 @@ function buildColumnsFromRows(rowsNormalized) {
   dynamicInvKeys = preferred.concat(remaining);
 
   visibleColumns = [
-    { key: "brand", label: "Brand", sortKey: "brand" },
-    { key: "season", label: "Season", sortKey: "season" },
-    { key: "style", label: "Style", sortKey: "style" },
-    { key: "sku", label: "SKU", sortKey: "sku" }
+    { key: "brand", label: "Brand", sortKey: "brand", thClass: "col-brand", tdClass: "col-brand" },
+    { key: "season", label: "Season", sortKey: "season", thClass: "col-season", tdClass: "col-season" },
+    { key: "style", label: "Style", sortKey: "style", thClass: "col-style", tdClass: "col-style" },
+    { key: "sku", label: "SKU", sortKey: "sku", thClass: "col-sku", tdClass: "col-sku" }
   ];
 
   dynamicInvKeys.forEach(k => {
-    visibleColumns.push({ key: k, label: k, sortKey: k });
+    visibleColumns.push({ key: k, label: k, sortKey: k, thClass: "num", tdClass: "num" });
   });
 }
 
@@ -226,12 +304,20 @@ function renderHeader() {
   const thead = document.getElementById("thead");
   thead.innerHTML = "";
 
+  const mode = getCompareMode();
+
   const tr1 = document.createElement("tr");
 
   visibleColumns.forEach(col => {
     const th = document.createElement("th");
+    if (col.thClass) th.className = col.thClass;
+
     th.innerHTML =
-      `<span class="th-btn" data-sort="${escapeHtml(col.sortKey)}">${escapeHtml(col.label)} <span id="si-${escapeHtml(col.sortKey)}" class="sort-ind"></span></span>`;
+      `<span class="th-btn" data-sort="${escapeHtml(col.sortKey)}">` +
+        `${renderHeaderLabel(col.label, mode)} ` +
+        `<span id="si-${escapeHtml(col.sortKey)}" class="sort-ind"></span>` +
+      `</span>`;
+
     tr1.appendChild(th);
   });
 
@@ -243,6 +329,8 @@ function renderHeader() {
 
   visibleColumns.forEach(col => {
     const th = document.createElement("th");
+    if (col.thClass) th.className = col.thClass;
+
     if (col.key === "brand") th.innerHTML = `<input id="fBrand" class="filter-input" placeholder="Filter brand…" />`;
     else if (col.key === "season") th.innerHTML = `<input id="fSeason" class="filter-input" placeholder="Filter season…" />`;
     else if (col.key === "style") th.innerHTML = `<input id="fStyle" class="filter-input" placeholder="Filter style…" />`;
@@ -327,20 +415,20 @@ async function loadRows() {
   qs.set("format", "new");
 
   const res = await fetch(`${API_BASE}/snapshots/${snapshotId}/rows?` + qs.toString());
-  const data = await res.json();  
+  const data = await res.json();
 
   let rowsNormalized = (data.rows || []).map(normalizeRow);
 
   // Client-side "only differences" filter (backend doesn't implement it yet)
-if (document.getElementById("onlyDiff").checked) {
-  const mode = getCompareMode();
-  const diffKey = getDiffKeyForMode(mode);
+  if (document.getElementById("onlyDiff").checked) {
+    const mode = getCompareMode();
+    const diffKey = getDiffKeyForMode(mode);
 
-  rowsNormalized = rowsNormalized.filter(r => {
-    const v = (r.inv && r.inv[diffKey]) != null ? Number(r.inv[diffKey]) : 0;
-    return v !== 0;
-  });
-}
+    rowsNormalized = rowsNormalized.filter(r => {
+      const v = (r.inv && r.inv[diffKey]) != null ? Number(r.inv[diffKey]) : 0;
+      return v !== 0;
+    });
+  }
 
   // Build dynamic columns from the returned rows, then render header.
   buildColumnsFromRows(rowsNormalized);
@@ -357,16 +445,14 @@ if (document.getElementById("onlyDiff").checked) {
     const diffValRaw = inv[diffKey];
     const diffVal = toNumberOrNull(diffValRaw) ?? 0;
 
-    const diffColor = diffVal === 0 ? "#15803d" : (diffVal > 0 ? "#b45309" : "#b91c1c");
-
     const tr = document.createElement("tr");
 
-    // Base columns
+    // Base columns (apply non-wrapping to SKU via class)
     let html = "";
-    html += `<td>${escapeHtml(r.brand)}</td>`;
-    html += `<td>${escapeHtml(r.season)}</td>`;
-    html += `<td>${escapeHtml(r.style)}</td>`;
-    html += `<td>${escapeHtml(r.sku)}</td>`;
+    html += `<td class="col-brand">${escapeHtml(r.brand)}</td>`;
+    html += `<td class="col-season">${escapeHtml(r.season)}</td>`;
+    html += `<td class="col-style">${escapeHtml(r.style)}</td>`;
+    html += `<td class="col-sku">${escapeHtml(r.sku)}</td>`;
 
     // Dynamic inventory columns
     dynamicInvKeys.forEach(k => {
@@ -388,10 +474,6 @@ if (document.getElementById("onlyDiff").checked) {
     });
 
     tr.innerHTML = html;
-
-    // Optional: emphasize the “active mode” diff key cell slightly (purely visual)
-    // (No extra DOM surgery; already colored.)
-
     tbody.appendChild(tr);
   });
 }
@@ -417,7 +499,6 @@ async function exportCsv() {
     onlyDiff
   });
 
-  // This is the important addition:
   qs.set("format", "new");
 
   const res = await fetch(`${API_BASE}/export?` + qs.toString());
