@@ -11,7 +11,7 @@
     th { background: #f3f3f3; vertical-align: middle; }
     .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
     input, select, button { padding: 6px; }
-    .num { text-align: center; }
+    .num { text-align: center; white-space: nowrap; }
     .mode { display: flex; align-items: center; gap: 6px; }
     .th-btn {
       cursor: pointer;
@@ -19,6 +19,7 @@
       display: inline-flex;
       gap: 6px;
       align-items: center;
+      white-space: nowrap;
     }
     .sort-ind { font-size: 11px; opacity: 0.7; }
     .filter-row th { background: #fafafa; }
@@ -62,28 +63,7 @@
 <div id="meta" class="muted"></div>
 
 <table>
-  <thead>
-    <tr>
-      <th><span class="th-btn" data-sort="brand">Brand <span id="si-brand" class="sort-ind"></span></span></th>
-      <th><span class="th-btn" data-sort="item">Item <span id="si-item" class="sort-ind"></span></span></th>
-      <th><span class="th-btn" data-sort="item_name">Item Name <span id="si-item_name" class="sort-ind"></span></span></th>
-      <th><span class="th-btn" data-sort="item_class">Class <span id="si-item_class" class="sort-ind"></span></span></th>
-      <th><span class="th-btn" data-sort="netsuite">NetSuite <span id="si-netsuite" class="sort-ind"></span></span></th>
-      <th><span class="th-btn" data-sort="snap">Snap <span id="si-snap" class="sort-ind"></span></span></th>
-      <th><span class="th-btn" data-sort="difference">Diff <span id="si-difference" class="sort-ind"></span></span></th>
-    </tr>
-
-    <tr class="filter-row">
-      <th><input id="fBrand" class="filter-input" placeholder="Filter brand…" /></th>
-      <th><input id="fItem" class="filter-input" placeholder="Filter item/name…" /></th>
-      <th></th>
-      <th><input id="fClass" class="filter-input" placeholder="Filter class…" /></th>
-      <th></th>
-      <th></th>
-      <th></th>
-    </tr>
-  </thead>
-
+  <thead id="thead"></thead>
   <tbody id="rows"></tbody>
 </table>
 
@@ -93,8 +73,11 @@ const API_BASE = "/api";
 let page = 1;
 const pageSize = 100;
 
-let sortField = "difference";
+let sortField = "";   // will default to Diff_OH / Diff_ATS based on mode
 let sortDir = "desc";
+
+let dynamicInvKeys = [];   // union of Inventory[0] keys across returned rows (page)
+let visibleColumns = [];   // rendered columns (base + inv keys in stable order)
 
 function debounce(fn, ms) {
   let t;
@@ -109,12 +92,88 @@ function getCompareMode() {
   return el ? el.value : "onHand";
 }
 
+function getDiffKeyForMode(mode) {
+  return mode === "available" ? "Diff_ATS" : "Diff_OH";
+}
+
+function normalizeRow(r) {
+  // Accept either Brand/Season/Style/SKU casing OR legacy casing if it sneaks in.
+  const inv0 = (r && r.Inventory && r.Inventory.length) ? r.Inventory[0] : (r && r.inventory && r.inventory.length ? r.inventory[0] : {});
+  return {
+    brand: r.Brand || r.brand || "",
+    season: r.Season || r.season || "",
+    style: r.Style || r.style || "",
+    sku: r.SKU || r.sku || "",
+    inv: inv0 || {}
+  };
+}
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function toNumberOrNull(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return isNaN(n) ? null : n;
+}
+
+function buildColumnsFromRows(rowsNormalized) {
+  // Union keys across the current page’s inventory objects
+  const keySet = {};
+  rowsNormalized.forEach(r => {
+    const inv = r.inv || {};
+    Object.keys(inv).forEach(k => { keySet[k] = true; });
+  });
+
+  // Stable-ish ordering:
+  // - Put NetSuite/Snap totals and Diff fields near the end but grouped
+  // - Keep other fields as encountered (alphabetical fallback)
+  const allKeys = Object.keys(keySet);
+
+  const preferredOrder = [
+    "NetSuite Total On Hand",
+    "Snap Total On Hand",
+    "Diff_OH",
+    "NetSuite Total ATS",
+    "Snap Total ATS",
+    "Diff_ATS"
+  ];
+
+  const preferred = [];
+  preferredOrder.forEach(k => {
+    if (keySet[k]) preferred.push(k);
+  });
+
+  const remaining = allKeys.filter(k => preferred.indexOf(k) === -1);
+  remaining.sort(function(a,b){
+    // keep it simple and predictable
+    return a.localeCompare(b);
+  });
+
+  dynamicInvKeys = preferred.concat(remaining);
+
+  visibleColumns = [
+    { key: "brand", label: "Brand", sortKey: "brand" },
+    { key: "season", label: "Season", sortKey: "season" },
+    { key: "style", label: "Style", sortKey: "style" },
+    { key: "sku", label: "SKU", sortKey: "sku" }
+  ];
+
+  dynamicInvKeys.forEach(k => {
+    visibleColumns.push({ key: k, label: k, sortKey: k });
+  });
+}
+
 function updateSortIndicators() {
-  const ids = ["brand","item","item_name","item_class","netsuite","snap","difference"];
-  ids.forEach(id => {
-    const el = document.getElementById("si-" + id);
+  visibleColumns.forEach(col => {
+    const el = document.getElementById("si-" + col.sortKey);
     if (!el) return;
-    el.textContent = (sortField === id) ? (sortDir === "asc" ? "▲" : "▼") : "";
+    el.textContent = (sortField === col.sortKey) ? (sortDir === "asc" ? "▲" : "▼") : "";
   });
 }
 
@@ -132,10 +191,57 @@ function setSort(field) {
 
 function clearAllFilters() {
   document.getElementById("fBrand").value = "";
-  document.getElementById("fItem").value = "";
-  document.getElementById("fClass").value = "";
+  document.getElementById("fSeason").value = "";
+  document.getElementById("fStyle").value = "";
+  document.getElementById("fSku").value = "";
   page = 1;
   loadRows();
+}
+
+function renderHeader() {
+  const thead = document.getElementById("thead");
+  thead.innerHTML = "";
+
+  const tr1 = document.createElement("tr");
+
+  visibleColumns.forEach(col => {
+    const th = document.createElement("th");
+    th.innerHTML =
+      `<span class="th-btn" data-sort="${escapeHtml(col.sortKey)}">${escapeHtml(col.label)} <span id="si-${escapeHtml(col.sortKey)}" class="sort-ind"></span></span>`;
+    tr1.appendChild(th);
+  });
+
+  thead.appendChild(tr1);
+
+  // Filter row: only for base fields (Brand/Season/Style/SKU)
+  const tr2 = document.createElement("tr");
+  tr2.className = "filter-row";
+
+  visibleColumns.forEach(col => {
+    const th = document.createElement("th");
+    if (col.key === "brand") th.innerHTML = `<input id="fBrand" class="filter-input" placeholder="Filter brand…" />`;
+    else if (col.key === "season") th.innerHTML = `<input id="fSeason" class="filter-input" placeholder="Filter season…" />`;
+    else if (col.key === "style") th.innerHTML = `<input id="fStyle" class="filter-input" placeholder="Filter style…" />`;
+    else if (col.key === "sku") th.innerHTML = `<input id="fSku" class="filter-input" placeholder="Filter SKU…" />`;
+    else th.innerHTML = "";
+    tr2.appendChild(th);
+  });
+
+  thead.appendChild(tr2);
+
+  // Wire sort clicks
+  thead.querySelectorAll(".th-btn").forEach(el => {
+    el.addEventListener("click", () => setSort(el.getAttribute("data-sort")));
+  });
+
+  // Wire filter events
+  const onFilterChange = debounce(() => { page = 1; loadRows(); }, 250);
+  ["fBrand","fSeason","fStyle","fSku"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("input", onFilterChange);
+  });
+
+  updateSortIndicators();
 }
 
 async function loadSnapshots() {
@@ -162,18 +268,34 @@ async function loadRows() {
   const snapshotId = document.getElementById("snapshots").value;
   if (!snapshotId) return;
 
-  const brand = document.getElementById("fBrand").value || "";
-  const itemClass = document.getElementById("fClass").value || "";
-  const search = document.getElementById("fItem").value || "";
+  const mode = getCompareMode();
+  const diffKey = getDiffKeyForMode(mode);
+
+  // Default sort to the right diff key if unset or if it was the other mode’s diff
+  if (!sortField || sortField === "Diff_OH" || sortField === "Diff_ATS") {
+    sortField = diffKey;
+  }
+
+  // Updated filters (client sends them; backend can ignore extras if not implemented yet)
+  const brand = (document.getElementById("fBrand") && document.getElementById("fBrand").value) || "";
+  const season = (document.getElementById("fSeason") && document.getElementById("fSeason").value) || "";
+  const style = (document.getElementById("fStyle") && document.getElementById("fStyle").value) || "";
+  const sku = (document.getElementById("fSku") && document.getElementById("fSku").value) || "";
+
   const onlyDiff = document.getElementById("onlyDiff").checked ? "1" : "0";
 
   const qs = new URLSearchParams({
     page,
     pageSize,
+
+    // New-ish filters
     brand,
-    itemClass,
-    search,
-    compareMode: getCompareMode(),
+    season,
+    style,
+    sku,
+
+    // Keep existing API contract knobs
+    compareMode: mode,
     sort: `${sortField}_${sortDir}`,
     onlyDiff
   });
@@ -181,25 +303,58 @@ async function loadRows() {
   const res = await fetch(`${API_BASE}/snapshots/${snapshotId}/rows?` + qs.toString());
   const data = await res.json();
 
+  const rowsNormalized = (data.rows || []).map(normalizeRow);
+
+  // Build dynamic columns from the returned rows, then render header.
+  buildColumnsFromRows(rowsNormalized);
+  renderHeader();
+
   document.getElementById("meta").textContent =
-    `Total rows: ${data.total} | Sort: ${sortField}_${sortDir} | Mode: ${getCompareMode()}`;
+    `Total rows: ${data.total} | Sort: ${sortField}_${sortDir} | Mode: ${mode} | Diff field: ${diffKey}`;
 
   const tbody = document.getElementById("rows");
   tbody.innerHTML = "";
 
-  (data.rows || []).forEach(r => {
-    const diff = r.difference ?? 0;
-    const diffColor = diff === 0 ? "#15803d" : (diff > 0 ? "#b45309" : "#b91c1c");
+  rowsNormalized.forEach(r => {
+    const inv = r.inv || {};
+    const diffValRaw = inv[diffKey];
+    const diffVal = toNumberOrNull(diffValRaw) ?? 0;
+
+    const diffColor = diffVal === 0 ? "#15803d" : (diffVal > 0 ? "#b45309" : "#b91c1c");
 
     const tr = document.createElement("tr");
-    tr.innerHTML =
-      `<td>${r.brand || ""}</td>` +
-      `<td>${r.item || ""}</td>` +
-      `<td>${r.item_name || ""}</td>` +
-      `<td>${r.item_class || ""}</td>` +
-      `<td class="num">${r.netsuite_total ?? ""}</td>` +
-      `<td class="num">${r.snap_total ?? ""}</td>` +
-      `<td class="num" style="font-weight:700;color:${diffColor};">${diff}</td>`;
+
+    // Base columns
+    let html = "";
+    html += `<td>${escapeHtml(r.brand)}</td>`;
+    html += `<td>${escapeHtml(r.season)}</td>`;
+    html += `<td>${escapeHtml(r.style)}</td>`;
+    html += `<td>${escapeHtml(r.sku)}</td>`;
+
+    // Dynamic inventory columns
+    dynamicInvKeys.forEach(k => {
+      const v = inv[k];
+
+      // numeric alignment, and special coloring for Diff_OH / Diff_ATS
+      const isDiffCol = (k === "Diff_OH" || k === "Diff_ATS");
+      const n = toNumberOrNull(v);
+
+      if (isDiffCol) {
+        const dv = (toNumberOrNull(v) ?? 0);
+        const c = dv === 0 ? "#15803d" : (dv > 0 ? "#b45309" : "#b91c1c");
+        html += `<td class="num" style="font-weight:700;color:${c};">${escapeHtml(dv)}</td>`;
+      } else if (n !== null) {
+        html += `<td class="num">${escapeHtml(n)}</td>`;
+      } else {
+        html += `<td>${escapeHtml(v)}</td>`;
+      }
+    });
+
+    tr.innerHTML = html;
+
+    // Optional: emphasize the “active mode” diff key cell slightly (purely visual)
+    // (No extra DOM surgery; already colored.)
+
     tbody.appendChild(tr);
   });
 }
@@ -208,17 +363,22 @@ async function exportCsv() {
   const snapshotId = document.getElementById("snapshots").value;
   if (!snapshotId) return;
 
-  const brand = document.getElementById("fBrand").value || "";
-  const itemClass = document.getElementById("fClass").value || "";
-  const search = document.getElementById("fItem").value || "";
+  const mode = getCompareMode();
+
+  const brand = (document.getElementById("fBrand") && document.getElementById("fBrand").value) || "";
+  const season = (document.getElementById("fSeason") && document.getElementById("fSeason").value) || "";
+  const style = (document.getElementById("fStyle") && document.getElementById("fStyle").value) || "";
+  const sku = (document.getElementById("fSku") && document.getElementById("fSku").value) || "";
+
   const onlyDiff = document.getElementById("onlyDiff").checked ? "1" : "0";
 
   const qs = new URLSearchParams({
     snapshotId,
     brand,
-    itemClass,
-    search,
-    compareMode: getCompareMode(),
+    season,
+    style,
+    sku,
+    compareMode: mode,
     sort: `${sortField}_${sortDir}`,
     onlyDiff
   });
@@ -229,7 +389,7 @@ async function exportCsv() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `inventory-export-${getCompareMode()}.csv`;
+  a.download = `inventory-export-${mode}.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -246,18 +406,8 @@ document.querySelectorAll('input[name="compareMode"]').forEach(r => {
   r.addEventListener("change", () => { page = 1; loadRows(); });
 });
 
-document.querySelectorAll(".th-btn").forEach(el => {
-  el.addEventListener("click", () => setSort(el.getAttribute("data-sort")));
-});
-
-const onFilterChange = debounce(() => { page = 1; loadRows(); }, 250);
-["fBrand", "fItem", "fClass"].forEach(id => {
-  document.getElementById(id).addEventListener("input", onFilterChange);
-});
-
 (async () => {
   await loadSnapshots();
-  updateSortIndicators();
   await loadRows();
 })();
 </script>
