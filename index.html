@@ -1,82 +1,59 @@
 <!doctype html>
 <html>
 <head>
-  <meta charset="utf-8" />
-  <title>Inventory Comparison</title>
+<meta charset="utf-8" />
+<title>Inventory Comparison</title>
 
-  <style>
-    body { font-family: system-ui; padding: 16px; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ddd; padding: 6px; }
-    th { background: #f3f3f3; vertical-align: middle; }
-    .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
-    input, select, button { padding: 6px; }
-    .num { text-align: center; white-space: nowrap; }
-    .mode { display: flex; align-items: center; gap: 6px; }
-    .th-btn {
-      cursor: pointer;
-      user-select: none;
-      display: inline-flex;
-      gap: 6px;
-      align-items: center;
-      white-space: nowrap;
-    }
-    .sort-ind { font-size: 11px; opacity: 0.7; }
-    .filter-row th { background: #fafafa; }
-    .filter-input {
-      width: 100%;
-      box-sizing: border-box;
-      padding: 5px;
-    }
-    .muted { color: #666; font-size: 12px; }
+<style>
+body { font-family: system-ui; padding: 16px; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ddd; padding: 6px; }
+th { background: #f3f3f3; vertical-align: middle; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+input, select, button { padding: 6px; }
+.num { text-align: center; white-space: nowrap; }
+.mode { display: flex; align-items: center; gap: 6px; }
+.th-btn { cursor: pointer; user-select: none; display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+.sort-ind { font-size: 11px; opacity: 0.7; }
+.filter-row th { background: #fafafa; }
+.filter-input { width: 100%; box-sizing: border-box; padding: 5px; }
+.muted { color: #666; font-size: 12px; }
 
-    /* Keep SKU from wrapping */
-    th.col-sku, td.col-sku {
-      white-space: nowrap;
-      word-break: normal;
-      overflow-wrap: normal;
-      min-width: 160px;
-    }
-    th.col-brand, td.col-brand,
-    th.col-season, td.col-season,
-    th.col-style, td.col-style {
-      white-space: nowrap;
-    }
+/* SKU no wrap */
+th.col-sku, td.col-sku {
+  white-space: nowrap;
+  min-width: 160px;
+}
 
-    /* Stacked inventory header lines */
-    .th-stack {
-      line-height: 1.05;
-      text-align: center;
-      white-space: nowrap;
-    }
-    .th-stack .l1 { font-weight: 700; }
-    .th-stack .l2 { font-weight: 600; font-size: 12px; opacity: 0.9; }
-    .th-stack .l3 { font-weight: 600; font-size: 12px; opacity: 0.9; }
+/* Sticky header */
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #f3f3f3;
+}
+.filter-row th {
+  position: sticky;
+  top: 38px;
+  z-index: 2;
+  background: #fafafa;
+}
 
-    /* Sticky header */
-    thead th {
-      position: sticky;
-      top: 0;
-      z-index: 3;
-      background: #f3f3f3;
-    }
-    .filter-row th {
-      position: sticky;
-      top: 38px; /* filter font size */
-      z-index: 2;
-      background: #fafafa;
-    }
+/* Filter highlight */
+.filter-input.active-filter {
+  outline: 2px solid #2563eb;
+  background: #eff6ff;
+}
 
-    /* Highlight active filters */
-    .filter-input.active-filter {
-      outline: 2px solid #3b82f6;     /* blue */
-      outline-offset: 0px;
-      background: #eff6ff;            /* light blue */
-    }
-    th.has-filter {
-      box-shadow: inset 0 -2px 0 #3b82f6; /* Underline on header */
-    }
-  </style>
+th.has-filter {
+  background: #fff7ed !important;
+}
+
+.filter-badge {
+  margin-left: 6px;
+  font-size: 12px;
+}
+</style>
 </head>
 
 <body>
@@ -84,37 +61,35 @@
 <h2>Inventory Comparison</h2>
 
 <div class="row">
-  <select id="snapshots"></select>
+<select id="snapshots"></select>
 
-  <label class="mode">
-    <input type="radio" name="compareMode" value="onHand" checked />
-    On Hand
-  </label>
+<label class="mode">
+  <input type="radio" name="compareMode" value="onHand" checked />
+  On Hand
+</label>
 
-  <label class="mode">
-    <input type="radio" name="compareMode" value="available" />
-    Available to Sell
-  </label>
+<label class="mode">
+  <input type="radio" name="compareMode" value="available" />
+  Available to Sell
+</label>
 
-  <label class="mode">
-    <input type="checkbox" id="onlyDiff" />
-    Only show differences
-  </label>
+<label class="mode">
+  <input type="checkbox" id="onlyDiff" />
+  Only show differences
+</label>
 
-  <!-- Refresh removed -->
-  <button id="clearFilters">Clear Filters</button>
-  <button id="export">Export CSV</button>
-  <span id="exportStatus"></span>
+<button id="clearFilters">Clear Filters</button>
+<button id="export">Export CSV</button>
+<span id="exportStatus"></span>
 </div>
 
 <div id="meta" class="muted"></div>
 
-<!-- Optional: scroll container for sticky headers + wide tables -->
 <div style="overflow:auto; max-height: 70vh;">
-  <table>
-    <thead id="thead"></thead>
-    <tbody id="rows"></tbody>
-  </table>
+<table>
+<thead id="thead"></thead>
+<tbody id="rows"></tbody>
+</table>
 </div>
 
 <script>
@@ -123,13 +98,12 @@ const API_BASE = "/api";
 let page = 1;
 const pageSize = 100;
 
-let sortField = "";   // will default to Diff_OH / Diff_ATS based on mode
+let sortField = "";
 let sortDir = "desc";
 
 let dynamicInvKeys = [];
 let visibleColumns = [];
 
-/* Persist filters between rerenders + mode toggles */
 const filters = {
   brand: "",
   season: "",
@@ -141,7 +115,7 @@ function debounce(fn, ms) {
   let t;
   return function() {
     clearTimeout(t);
-    t = setTimeout(() => fn(), ms);
+    t = setTimeout(fn, ms);
   };
 }
 
@@ -154,195 +128,83 @@ function getDiffKeyForMode(mode) {
   return mode === "available" ? "Diff_ATS" : "Diff_OH";
 }
 
-function normalizeRow(r) {
-  const inv0 = (r && r.Inventory && r.Inventory.length) ? r.Inventory[0] : (r && r.inventory && r.inventory.length ? r.inventory[0] : {});
-  return {
-    brand: r.Brand || r.brand || "",
-    season: r.Season || r.season || "",
-    style: r.Style || r.style || "",
-    sku: r.SKU || r.sku || "",
-    inv: inv0 || {}
-  };
-}
-
 function escapeHtml(s) {
-  return String(s == null ? "" : s)
+  return String(s ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
 
-function toNumberOrNull(v) {
-  if (v === null || v === undefined || v === "") return null;
-  const n = Number(v);
-  return isNaN(n) ? null : n;
+function normalizeRow(r) {
+  const inv0 = (r.Inventory && r.Inventory.length) ? r.Inventory[0] : {};
+  return {
+    brand: r.Brand || "",
+    season: r.Season || "",
+    style: r.Style || "",
+    sku: r.SKU || "",
+    inv: inv0
+  };
 }
 
-function getStackedHeaderParts(label, mode) {
-  const s = String(label || "");
-  const metric = (mode === "available") ? "ATS" : "On Hand";
-
-  if (s === "Diff_OH" || s === "Diff_ATS") {
-    return { l1: "Diff", l2: "", l3: (mode === "available") ? "ATS" : "On-Hand" };
-  }
-
-  const metricPos = s.indexOf(metric);
-  if (metricPos >= 0) {
-    const left = s.substring(0, metricPos).trim();
-    const right = s.substring(metricPos).trim();
-    const leftParts = left.split(/\s+/);
-    return {
-      l1: leftParts[0] || s,
-      l2: leftParts.slice(1).join(" ") || "",
-      l3: right.replace("On Hand", "On-Hand")
-    };
-  }
-
-  return { l1: s, l2: "", l3: "" };
-}
-
-function renderHeaderLabel(colLabel, mode) {
-  if (colLabel === "Brand" || colLabel === "Season" || colLabel === "Style" || colLabel === "SKU") {
-    return escapeHtml(colLabel);
-  }
-
-  const p = getStackedHeaderParts(colLabel, mode);
-  return (
-    '<div class="th-stack">' +
-      '<div class="l1">' + escapeHtml(p.l1) + '</div>' +
-      (p.l2 ? '<div class="l2">' + escapeHtml(p.l2) + '</div>' : '<div class="l2"></div>') +
-      (p.l3 ? '<div class="l3">' + escapeHtml(p.l3) + '</div>' : '<div class="l3"></div>') +
-    '</div>'
-  );
-}
-
-function buildColumnsFromRows(rowsNormalized) {
+function buildColumnsFromRows(rows) {
   const mode = getCompareMode();
   const diffKey = getDiffKeyForMode(mode);
 
   const keySet = {};
-  rowsNormalized.forEach(r => {
-    const inv = r.inv || {};
-    Object.keys(inv).forEach(k => { keySet[k] = true; });
+  rows.forEach(r => {
+    Object.keys(r.inv || {}).forEach(k => keySet[k] = true);
   });
 
-  function keyMatchesMode(k) {
-    const kk = String(k || "");
-
-    const isDiff = (kk === "Diff_OH" || kk === "Diff_ATS");
-    if (isDiff) return kk === diffKey;
-
-    const hasOnHand = kk.indexOf("On Hand") >= 0;
-    const hasATS = kk.indexOf("ATS") >= 0;
-
-    if (mode === "available") return hasATS;
-    return hasOnHand;
+  function matchesMode(k) {
+    if (k === "Diff_OH" || k === "Diff_ATS") return k === diffKey;
+    if (mode === "available") return k.includes("ATS");
+    return k.includes("On Hand");
   }
 
-  const allKeys = Object.keys(keySet).filter(keyMatchesMode);
-
-  const preferredOrderOnHand = ["NetSuite Total On Hand","Snap Total On Hand","Diff_OH"];
-  const preferredOrderATS = ["NetSuite Total ATS","Snap Total ATS","Diff_ATS"];
-  const preferredOrder = (mode === "available") ? preferredOrderATS : preferredOrderOnHand;
-
-  const preferred = [];
-  preferredOrder.forEach(k => { if (allKeys.indexOf(k) >= 0) preferred.push(k); });
-
-  const remaining = allKeys.filter(k => preferred.indexOf(k) === -1);
-  remaining.sort(function(a,b){ return a.localeCompare(b); });
-
-  dynamicInvKeys = preferred.concat(remaining);
+  const invKeys = Object.keys(keySet).filter(matchesMode).sort();
 
   visibleColumns = [
-    { key: "brand", label: "Brand", sortKey: "brand", thClass: "col-brand", tdClass: "col-brand" },
-    { key: "season", label: "Season", sortKey: "season", thClass: "col-season", tdClass: "col-season" },
-    { key: "style", label: "Style", sortKey: "style", thClass: "col-style", tdClass: "col-style" },
-    { key: "sku", label: "SKU", sortKey: "sku", thClass: "col-sku", tdClass: "col-sku" }
+    { key:"brand", label:"Brand" },
+    { key:"season", label:"Season" },
+    { key:"style", label:"Style" },
+    { key:"sku", label:"SKU" }
   ];
 
-  dynamicInvKeys.forEach(k => {
-    visibleColumns.push({ key: k, label: k, sortKey: k, thClass: "num", tdClass: "num" });
-  });
-}
-
-function updateSortIndicators() {
-  visibleColumns.forEach(col => {
-    const el = document.getElementById("si-" + col.sortKey);
-    if (!el) return;
-    el.textContent = (sortField === col.sortKey) ? (sortDir === "asc" ? "▲" : "▼") : "";
-  });
-}
-
-function setSort(field) {
-  if (sortField === field) sortDir = sortDir === "asc" ? "desc" : "asc";
-  else { sortField = field; sortDir = "desc"; }
-  page = 1;
-  updateSortIndicators();
-  loadRows();
-}
-
-function clearAllFilters() {
-  filters.brand = "";
-  filters.season = "";
-  filters.style = "";
-  filters.sku = "";
-
-  page = 1;
-  loadRows();  // rerender will repopulate inputs with blank values
-}
-
-/* Apply filter UI state (highlight active inputs + header underline) */
-function applyFilterStyling() {
-  const mapping = [
-    { id: "fBrand", key: "brand", thKey: "brand" },
-    { id: "fSeason", key: "season", thKey: "season" },
-    { id: "fStyle", key: "style", thKey: "style" },
-    { id: "fSku", key: "sku", thKey: "sku" }
-  ];
-
-  mapping.forEach(m => {
-    const input = document.getElementById(m.id);
-    const th = document.getElementById("th-" + m.thKey);
-
-    const active = String(filters[m.key] || "").trim().length > 0;
-
-    if (input) {
-      if (active) input.classList.add("active-filter");
-      else input.classList.remove("active-filter");
-    }
-
-    if (th) {
-      if (active) th.classList.add("has-filter");
-      else th.classList.remove("has-filter");
-    }
-  });
+  invKeys.forEach(k => visibleColumns.push({ key:k, label:k }));
+  dynamicInvKeys = invKeys;
 }
 
 function renderHeader() {
   const thead = document.getElementById("thead");
   thead.innerHTML = "";
 
-  const mode = getCompareMode();
-
   const tr1 = document.createElement("tr");
+
   visibleColumns.forEach(col => {
     const th = document.createElement("th");
-    if (col.thClass) th.className = col.thClass;
+    if (col.key === "sku") th.classList.add("col-sku");
 
-    // give IDs to the base header
-    if (col.key === "brand" || col.key === "season" || col.key === "style" || col.key === "sku") {
-      th.id = "th-" + col.key;
-    }
+    const isBase = ["brand","season","style","sku"].includes(col.key);
+    if (isBase) th.id = "th-" + col.key;
 
-    th.innerHTML =
-      `<span class="th-btn" data-sort="${escapeHtml(col.sortKey)}">` +
-        `${renderHeaderLabel(col.label, mode)} ` +
-        `<span id="si-${escapeHtml(col.sortKey)}" class="sort-ind"></span>` +
-      `</span>`;
+    let isFiltered = false;
+    if (col.key in filters)
+      isFiltered = filters[col.key].trim().length > 0;
+
+    if (isFiltered) th.classList.add("has-filter");
+
+    const badge = isFiltered ? `<span class="filter-badge">🔎</span>` : "";
+
+    th.innerHTML = `
+      <span class="th-btn">
+        ${escapeHtml(col.label)}${badge}
+      </span>
+    `;
 
     tr1.appendChild(th);
   });
+
   thead.appendChild(tr1);
 
   const tr2 = document.createElement("tr");
@@ -350,47 +212,56 @@ function renderHeader() {
 
   visibleColumns.forEach(col => {
     const th = document.createElement("th");
-    if (col.thClass) th.className = col.thClass;
 
-    if (col.key === "brand") th.innerHTML = `<input id="fBrand" class="filter-input" placeholder="Filter brand…" />`;
-    else if (col.key === "season") th.innerHTML = `<input id="fSeason" class="filter-input" placeholder="Filter season…" />`;
-    else if (col.key === "style") th.innerHTML = `<input id="fStyle" class="filter-input" placeholder="Filter style…" />`;
-    else if (col.key === "sku") th.innerHTML = `<input id="fSku" class="filter-input" placeholder="Filter SKU…" />`;
-    else th.innerHTML = "";
+    if (col.key in filters) {
+      th.innerHTML = `
+        <input id="f-${col.key}"
+               autocomplete="off"
+               class="filter-input"
+               placeholder="Filter..."
+               value="${escapeHtml(filters[col.key])}" />
+      `;
+    }
 
     tr2.appendChild(th);
   });
+
   thead.appendChild(tr2);
 
-  // Wire sort clicks
-  thead.querySelectorAll(".th-btn").forEach(el => {
-    el.addEventListener("click", () => setSort(el.getAttribute("data-sort")));
+  Object.keys(filters).forEach(k => {
+    const el = document.getElementById("f-" + k);
+    if (el) {
+      el.addEventListener("input", debounce(() => {
+        filters[k] = el.value;
+        page = 1;
+        loadRows();
+      }, 250));
+    }
   });
 
-  // Rehydrate filter input values from persisted filters object
-  if (document.getElementById("fBrand")) document.getElementById("fBrand").value = filters.brand;
-  if (document.getElementById("fSeason")) document.getElementById("fSeason").value = filters.season;
-  if (document.getElementById("fStyle")) document.getElementById("fStyle").value = filters.style;
-  if (document.getElementById("fSku")) document.getElementById("fSku").value = filters.sku;
-
-  // Wire filter events
-  const onFilterChange = debounce(() => {
-    filters.brand = (document.getElementById("fBrand") && document.getElementById("fBrand").value) || "";
-    filters.season = (document.getElementById("fSeason") && document.getElementById("fSeason").value) || "";
-    filters.style = (document.getElementById("fStyle") && document.getElementById("fStyle").value) || "";
-    filters.sku = (document.getElementById("fSku") && document.getElementById("fSku").value) || "";
-
-    page = 1;
-    loadRows();
-  }, 250);
-
-  ["fBrand","fSeason","fStyle","fSku"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener("input", onFilterChange);
-  });
-
-  updateSortIndicators();
   applyFilterStyling();
+}
+
+function applyFilterStyling() {
+  Object.keys(filters).forEach(k => {
+    const input = document.getElementById("f-" + k);
+    const th = document.getElementById("th-" + k);
+
+    const active = filters[k].trim().length > 0;
+
+    if (input) {
+      input.classList.toggle("active-filter", active);
+    }
+    if (th) {
+      th.classList.toggle("has-filter", active);
+    }
+  });
+}
+
+function clearAllFilters() {
+  Object.keys(filters).forEach(k => filters[k] = "");
+  page = 1;
+  loadRows();
 }
 
 async function loadSnapshots() {
@@ -399,122 +270,62 @@ async function loadSnapshots() {
   const sel = document.getElementById("snapshots");
   sel.innerHTML = "";
 
-  if (data && data.length) {
-    data.forEach(s => {
-      const opt = document.createElement("option");
-      opt.value = s.snapshotId;
-      opt.textContent = `${new Date(s.snapshotDate).toLocaleDateString()} (${s.rowCount})`;
-      sel.appendChild(opt);
-    });
-  } else {
+  data.forEach(s => {
     const opt = document.createElement("option");
-    opt.textContent = "No snapshots found";
+    opt.value = s.snapshotId;
+    opt.textContent = new Date(s.snapshotDate).toLocaleDateString();
     sel.appendChild(opt);
-  }
+  });
 }
 
 async function loadRows() {
   const snapshotId = document.getElementById("snapshots").value;
   if (!snapshotId) return;
 
-  const mode = getCompareMode();
-  const diffKey = getDiffKeyForMode(mode);
-
-  if (!sortField || sortField === "Diff_OH" || sortField === "Diff_ATS") sortField = diffKey;
-
-  const onlyDiff = document.getElementById("onlyDiff").checked ? "1" : "0";
-
   const qs = new URLSearchParams({
     page,
     pageSize,
-
-    brand: filters.brand,
-    season: filters.season,
-    style: filters.style,
-    sku: filters.sku,
-
-    compareMode: mode,
-    sort: `${sortField}_${sortDir}`,
-    onlyDiff
+    ...filters,
+    compareMode: getCompareMode()
   });
-
-  qs.set("format", "new");
 
   const res = await fetch(`${API_BASE}/snapshots/${snapshotId}/rows?` + qs.toString());
   const data = await res.json();
 
-  let rowsNormalized = (data.rows || []).map(normalizeRow);
+  let rows = (data.rows || []).map(normalizeRow);
 
-  // Client-side only-diffs
-  if (document.getElementById("onlyDiff").checked) {
-    rowsNormalized = rowsNormalized.filter(r => {
-      const v = (r.inv && r.inv[diffKey]) != null ? Number(r.inv[diffKey]) : 0;
-      return v !== 0;
-    });
-  }
-
-  buildColumnsFromRows(rowsNormalized);
+  buildColumnsFromRows(rows);
   renderHeader();
-
-  document.getElementById("meta").textContent =
-    `Total rows: ${data.total} | Sort: ${sortField}_${sortDir} | Mode: ${mode} | Diff field: ${diffKey}`;
 
   const tbody = document.getElementById("rows");
   tbody.innerHTML = "";
 
-  rowsNormalized.forEach(r => {
-    const inv = r.inv || {};
-
+  rows.forEach(r => {
     const tr = document.createElement("tr");
 
-    let html = "";
-    html += `<td class="col-brand">${escapeHtml(r.brand)}</td>`;
-    html += `<td class="col-season">${escapeHtml(r.season)}</td>`;
-    html += `<td class="col-style">${escapeHtml(r.style)}</td>`;
-    html += `<td class="col-sku">${escapeHtml(r.sku)}</td>`;
+    visibleColumns.forEach(col => {
+      const td = document.createElement("td");
+      if (col.key === "sku") td.classList.add("col-sku");
 
-    dynamicInvKeys.forEach(k => {
-      const v = inv[k];
-      const isDiffCol = (k === "Diff_OH" || k === "Diff_ATS");
-      const n = toNumberOrNull(v);
+      if (col.key in r) td.textContent = r[col.key];
+      else td.textContent = r.inv[col.key] ?? "";
 
-      if (isDiffCol) {
-        const dv = (toNumberOrNull(v) ?? 0);
-        const c = dv === 0 ? "#15803d" : (dv > 0 ? "#b45309" : "#b91c1c");
-        html += `<td class="num" style="font-weight:700;color:${c};">${escapeHtml(dv)}</td>`;
-      } else if (n !== null) {
-        html += `<td class="num">${escapeHtml(n)}</td>`;
-      } else {
-        html += `<td>${escapeHtml(v)}</td>`;
-      }
+      tr.appendChild(td);
     });
 
-    tr.innerHTML = html;
     tbody.appendChild(tr);
   });
-
-  // Re-apply highlight after render
-  applyFilterStyling();
 }
 
 async function exportCsv() {
   const snapshotId = document.getElementById("snapshots").value;
   if (!snapshotId) return;
 
-  const onlyDiff = document.getElementById("onlyDiff").checked ? "1" : "0";
-
   const qs = new URLSearchParams({
     snapshotId,
-    brand: filters.brand,
-    season: filters.season,
-    style: filters.style,
-    sku: filters.sku,
-    compareMode: getCompareMode(),
-    sort: `${sortField}_${sortDir}`,
-    onlyDiff
+    ...filters,
+    compareMode: getCompareMode()
   });
-
-  qs.set("format", "new");
 
   const res = await fetch(`${API_BASE}/export?` + qs.toString());
   const blob = await res.blob();
@@ -522,7 +333,7 @@ async function exportCsv() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `inventory-export-${getCompareMode()}.csv`;
+  a.download = "inventory-export.csv";
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -531,11 +342,9 @@ async function exportCsv() {
 
 document.getElementById("clearFilters").addEventListener("click", clearAllFilters);
 document.getElementById("export").addEventListener("click", exportCsv);
-document.getElementById("snapshots").addEventListener("change", () => { page = 1; loadRows(); });
-document.getElementById("onlyDiff").addEventListener("change", () => { page = 1; loadRows(); });
-
+document.getElementById("snapshots").addEventListener("change", () => loadRows());
 document.querySelectorAll('input[name="compareMode"]').forEach(r => {
-  r.addEventListener("change", () => { page = 1; loadRows(); });
+  r.addEventListener("change", () => loadRows());
 });
 
 (async () => {
