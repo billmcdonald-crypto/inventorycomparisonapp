@@ -123,6 +123,9 @@ function toNumberOrNull(v) {
 }
 
 function buildColumnsFromRows(rowsNormalized) {
+  const mode = getCompareMode();              // "onHand" or "available"
+  const diffKey = getDiffKeyForMode(mode);    // "Diff_OH" or "Diff_ATS"
+
   // Union keys across the current page’s inventory objects
   const keySet = {};
   rowsNormalized.forEach(r => {
@@ -130,30 +133,51 @@ function buildColumnsFromRows(rowsNormalized) {
     Object.keys(inv).forEach(k => { keySet[k] = true; });
   });
 
-  // Stable-ish ordering:
-  // - Put NetSuite/Snap totals and Diff fields near the end but grouped
-  // - Keep other fields as encountered (alphabetical fallback)
-  const allKeys = Object.keys(keySet);
+  // Decide which inventory keys to show based on mode.
+  // OnHand: show "*On Hand*" keys + Diff_OH (and hide ATS stuff)
+  // Available: show "*ATS*" keys + Diff_ATS (and hide On Hand stuff)
+  function keyMatchesMode(k) {
+    const kk = String(k || "");
 
-  const preferredOrder = [
+    const isDiff = (kk === "Diff_OH" || kk === "Diff_ATS");
+    if (isDiff) return kk === diffKey;
+
+    const hasOnHand = kk.indexOf("On Hand") >= 0;
+    const hasATS = kk.indexOf("ATS") >= 0;
+
+    if (mode === "available") {
+      // show ATS columns (plus totals ATS)
+      return hasATS;
+    } else {
+      // show On Hand columns (plus totals On Hand)
+      return hasOnHand;
+    }
+  }
+
+  const allKeys = Object.keys(keySet).filter(keyMatchesMode);
+
+  // Stable ordering: totals + diff first, then the rest alphabetical
+  const preferredOrderOnHand = [
     "NetSuite Total On Hand",
     "Snap Total On Hand",
-    "Diff_OH",
+    "Diff_OH"
+  ];
+
+  const preferredOrderATS = [
     "NetSuite Total ATS",
     "Snap Total ATS",
     "Diff_ATS"
   ];
 
+  const preferredOrder = (mode === "available") ? preferredOrderATS : preferredOrderOnHand;
+
   const preferred = [];
   preferredOrder.forEach(k => {
-    if (keySet[k]) preferred.push(k);
+    if (allKeys.indexOf(k) >= 0) preferred.push(k);
   });
 
   const remaining = allKeys.filter(k => preferred.indexOf(k) === -1);
-  remaining.sort(function(a,b){
-    // keep it simple and predictable
-    return a.localeCompare(b);
-  });
+  remaining.sort(function(a,b){ return a.localeCompare(b); });
 
   dynamicInvKeys = preferred.concat(remaining);
 
