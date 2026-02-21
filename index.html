@@ -30,6 +30,22 @@
     }
     .muted { color: #666; font-size: 12px; }
 
+  /* Sticky header */
+  thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #f3f3f3; /* important so it doesn't go transparent */
+    }
+
+  /* Sticky filter row (second header row) */
+  .filter-row th {
+  position: sticky;
+  top: 38px;  /* adjust if needed */
+  z-index: 2;
+  background: #fafafa;
+    }
+
     /* =========================
        NEW: SKU + stacked headers
        ========================= */
