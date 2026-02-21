@@ -300,8 +300,10 @@ async function loadRows() {
     onlyDiff
   });
 
+  qs.set("format", "new");
+
   const res = await fetch(`${API_BASE}/snapshots/${snapshotId}/rows?` + qs.toString());
-  const data = await res.json();
+  const data = await res.json();  
 
   const rowsNormalized = (data.rows || []).map(normalizeRow);
 
