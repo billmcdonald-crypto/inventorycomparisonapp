@@ -329,7 +329,18 @@ async function loadRows() {
   const res = await fetch(`${API_BASE}/snapshots/${snapshotId}/rows?` + qs.toString());
   const data = await res.json();  
 
-  const rowsNormalized = (data.rows || []).map(normalizeRow);
+  let rowsNormalized = (data.rows || []).map(normalizeRow);
+
+  // Client-side "only differences" filter (backend doesn't implement it yet)
+if (document.getElementById("onlyDiff").checked) {
+  const mode = getCompareMode();
+  const diffKey = getDiffKeyForMode(mode);
+
+  rowsNormalized = rowsNormalized.filter(r => {
+    const v = (r.inv && r.inv[diffKey]) != null ? Number(r.inv[diffKey]) : 0;
+    return v !== 0;
+  });
+}
 
   // Build dynamic columns from the returned rows, then render header.
   buildColumnsFromRows(rowsNormalized);
