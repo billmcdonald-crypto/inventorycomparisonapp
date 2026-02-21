@@ -400,13 +400,10 @@ async function exportCsv() {
   const snapshotId = document.getElementById("snapshots").value;
   if (!snapshotId) return;
 
-  const mode = getCompareMode();
-
   const brand = (document.getElementById("fBrand") && document.getElementById("fBrand").value) || "";
   const season = (document.getElementById("fSeason") && document.getElementById("fSeason").value) || "";
   const style = (document.getElementById("fStyle") && document.getElementById("fStyle").value) || "";
   const sku = (document.getElementById("fSku") && document.getElementById("fSku").value) || "";
-
   const onlyDiff = document.getElementById("onlyDiff").checked ? "1" : "0";
 
   const qs = new URLSearchParams({
@@ -415,10 +412,13 @@ async function exportCsv() {
     season,
     style,
     sku,
-    compareMode: mode,
+    compareMode: getCompareMode(),
     sort: `${sortField}_${sortDir}`,
     onlyDiff
   });
+
+  // This is the important addition:
+  qs.set("format", "new");
 
   const res = await fetch(`${API_BASE}/export?` + qs.toString());
   const blob = await res.blob();
@@ -426,7 +426,7 @@ async function exportCsv() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `inventory-export-${mode}.csv`;
+  a.download = `inventory-export-${getCompareMode()}.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();
