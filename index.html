@@ -78,7 +78,11 @@
   </label>
 
   <button id="clearFilters">Clear Filters</button>
-  <button id="export">Export CSV</button>
+
+  <!-- CHANGED: separate buttons -->
+  <button id="exportCsv">Export CSV</button>
+  <button id="exportXlsx">Export Excel</button>
+
   <span id="exportStatus"></span>
 </div>
 
@@ -245,7 +249,6 @@ function keyAllowedForSelectedBrand(k) {
   if (k === "NetSuite Total ATS" || k === "Snap Total ATS" || k === "Diff_ATS") return true;
 
   // Brand-specific inventory columns are typically "Brand Something Metric"
-  // ex: "Ashworth B2B On Hand" starts with "Ashworth "
   const prefix = String(selectedBrand).trim() + " ";
   return String(k || "").indexOf(prefix) === 0;
 }
@@ -262,7 +265,6 @@ function buildColumnsFromRows(rowsNormalized) {
 
   function keyMatchesMode(k) {
     const kk = String(k || "");
-
     const isDiff = (kk === "Diff_OH" || kk === "Diff_ATS");
     if (isDiff) return kk === diffKey;
 
@@ -361,7 +363,6 @@ function renderHeader() {
   thead.innerHTML = "";
 
   const mode = getCompareMode();
-
   const tr1 = document.createElement("tr");
 
   visibleColumns.forEach(col => {
@@ -419,7 +420,6 @@ function renderHeader() {
   if (document.getElementById("fStyle")) document.getElementById("fStyle").value = filters.style;
   if (document.getElementById("fSku")) document.getElementById("fSku").value = filters.sku;
 
-  // Filter behavior: type freely, apply on Enter
   function syncFiltersFromInputs() {
     filters.brand = (document.getElementById("fBrand") && document.getElementById("fBrand").value) || "";
     filters.season = (document.getElementById("fSeason") && document.getElementById("fSeason").value) || "";
@@ -509,16 +509,13 @@ async function loadRows() {
 
   let rowsNormalized = (data.rows || []).map(normalizeRow);
 
-  // Update dropdown brand options (cache + render)
   updateBrandCacheFromRows(rowsNormalized);
   renderBrandDropdown();
 
-  // Apply brand selection filtering to rows
   if (selectedBrand !== "__ALL__") {
     rowsNormalized = rowsNormalized.filter(rowMatchesSelectedBrand);
   }
 
-  // Client-side only differences filter
   if (document.getElementById("onlyDiff").checked) {
     rowsNormalized = rowsNormalized.filter(r => {
       const v = (r.inv && r.inv[diffKey]) != null ? Number(r.inv[diffKey]) : 0;
@@ -587,7 +584,8 @@ window.addEventListener("pageshow", () => {
   }
 });
 
-async function exportCsv() {
+/* NEW: unified export helper */
+async function exportFile(fileType) {
   const snapshotId = document.getElementById("snapshots").value;
   if (!snapshotId) return;
 
@@ -604,23 +602,51 @@ async function exportCsv() {
     onlyDiff
   });
 
+  // Keep data format the same
   qs.set("format", "new");
 
+  // NEW: choose output file type
+  qs.set("file", fileType); // "csv" | "xlsx"
+
+  // NEW: pass the dropdown brand selection so export matches view
+  if (selectedBrand && selectedBrand !== "__ALL__") {
+    qs.set("brandView", selectedBrand);
+  }
+
+  const statusEl = document.getElementById("exportStatus");
+  if (statusEl) statusEl.textContent = (fileType === "xlsx") ? "Exporting Excel…" : "Exporting CSV…";
+
   const res = await fetch(`${API_BASE}/export?` + qs.toString());
+  if (!res.ok) {
+    const txt = await res.text();
+    if (statusEl) statusEl.textContent = "";
+    alert("Export failed: " + txt);
+    return;
+  }
+
   const blob = await res.blob();
 
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `inventory-export-${getCompareMode()}.csv`;
+  a.download = `inventory-export-${getCompareMode()}.${fileType === "xlsx" ? "xlsx" : "csv"}`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+
+  if (statusEl) statusEl.textContent = "";
 }
 
+async function exportCsv() { return exportFile("csv"); }
+async function exportXlsx() { return exportFile("xlsx"); }
+
 document.getElementById("clearFilters").addEventListener("click", clearAllFilters);
-document.getElementById("export").addEventListener("click", exportCsv);
+
+/* CHANGED: new button IDs */
+document.getElementById("exportCsv").addEventListener("click", exportCsv);
+document.getElementById("exportXlsx").addEventListener("click", exportXlsx);
+
 document.getElementById("snapshots").addEventListener("change", () => { page = 1; loadRows(); });
 document.getElementById("onlyDiff").addEventListener("change", () => { page = 1; loadRows(); });
 
