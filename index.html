@@ -419,25 +419,47 @@ function renderHeader() {
   if (document.getElementById("fStyle")) document.getElementById("fStyle").value = filters.style;
   if (document.getElementById("fSku")) document.getElementById("fSku").value = filters.sku;
 
-  // Wire filter events (update persisted filters + reload)
-  const onFilterChange = debounce(() => {
+  // Wire filter events:
+  // - On input: update filter state + highlight, but DON'T reload
+  // - On Enter: apply (reload)
+  // - On Escape: clear that one field (optional but nice)
+  function syncFiltersFromInputs() {
     filters.brand = (document.getElementById("fBrand") && document.getElementById("fBrand").value) || "";
     filters.season = (document.getElementById("fSeason") && document.getElementById("fSeason").value) || "";
     filters.style = (document.getElementById("fStyle") && document.getElementById("fStyle").value) || "";
     filters.sku = (document.getElementById("fSku") && document.getElementById("fSku").value) || "";
-
-    page = 1;
-    loadRows();
-  }, 250);
+  }
 
   ["fBrand","fSeason","fStyle","fSku"].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.addEventListener("input", onFilterChange);
-  });
+    if (!el) return;
 
-  updateSortIndicators();
-  applyFilterStyling();
-}
+    // Keep state + indicator in sync while typing
+    el.addEventListener("input", () => {
+      syncFiltersFromInputs();
+      applyFilterStyling();
+      // no loadRows here
+    });
+
+    // Apply on Enter
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        syncFiltersFromInputs();
+        applyFilterStyling();
+        page = 1;
+        loadRows();
+      }
+
+      // Optional: ESC clears this one input
+      if (e.key === "Escape") {
+        e.preventDefault();
+        el.value = "";
+        syncFiltersFromInputs();
+        applyFilterStyling();
+      }
+    });
+  });
 
 async function loadSnapshots() {
   const res = await fetch(`${API_BASE}/snapshots`);
