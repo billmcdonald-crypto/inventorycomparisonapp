@@ -13,25 +13,41 @@
     input, select, button { padding: 6px; }
     .num { text-align: center; white-space: nowrap; }
     .mode { display: flex; align-items: center; gap: 6px; }
+    .th-btn {
+      cursor: pointer;
+      user-select: none;
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      white-space: nowrap;
+    }
     .sort-ind { font-size: 11px; opacity: 0.7; }
     .filter-row th { background: #fafafa; }
     .filter-input { width: 100%; box-sizing: border-box; padding: 5px; }
     .muted { color: #666; font-size: 12px; }
 
+    /* Keep SKU from wrapping and keep a usable width */
     th.col-sku, td.col-sku {
       white-space: nowrap;
+      word-break: normal;
+      overflow-wrap: normal;
       min-width: 160px;
     }
 
+    /* Stacked inventory header lines */
     .th-stack { line-height: 1.05; text-align: center; white-space: nowrap; }
     .th-stack .l1 { font-weight: 700; }
-    .th-stack .l2, .th-stack .l3 { font-weight: 600; font-size: 12px; opacity: 0.9; }
+    .th-stack .l2 { font-weight: 600; font-size: 12px; opacity: 0.9; }
+    .th-stack .l3 { font-weight: 600; font-size: 12px; opacity: 0.9; }
 
+    /* Sticky header */
     thead th { position: sticky; top: 0; z-index: 3; background: #f3f3f3; }
     .filter-row th { position: sticky; top: 38px; z-index: 2; background: #fafafa; }
 
+    /* Active filter styling */
     .filter-input.active-filter { outline: 2px solid #2563eb; background: #eff6ff; }
     th.has-filter { background: #fff7ed !important; }
+    .filter-badge { margin-left: 6px; font-size: 12px; opacity: 0.85; }
   </style>
 </head>
 
@@ -62,8 +78,12 @@
   </label>
 
   <button id="clearFilters">Clear Filters</button>
+
+  <!-- CHANGED: separate export buttons -->
   <button id="exportCsv">Export CSV</button>
   <button id="exportXlsx">Export Excel</button>
+
+  <span id="exportStatus"></span>
 </div>
 
 <div id="meta" class="muted"></div>
@@ -80,13 +100,33 @@ const API_BASE = "/api";
 
 let page = 1;
 const pageSize = 100;
+
 let sortField = "";
 let sortDir = "desc";
+
 let dynamicInvKeys = [];
 let visibleColumns = [];
+
 const filters = { brand: "", season: "", style: "", sku: "" };
-let selectedBrand = "__ALL__";
-const brandCache = {};
+
+let justCleared = false;
+
+// Brand dropdown state
+let selectedBrand = "__ALL__";           // "__ALL__" means no brand filtering
+const brandCache = {};                  // { "Ashworth": true, ... }
+
+function debounce(fn, ms) {
+  let t;
+  return function() {
+    clearTimeout(t);
+    const args = arguments;
+    t = setTimeout(() => fn.apply(null, args), ms);
+  };
+}
+
+function normStr(s) {
+  return String(s == null ? "" : s).trim().toLowerCase();
+}
 
 function getCompareMode() {
   const el = document.querySelector('input[name="compareMode"]:checked');
@@ -97,23 +137,317 @@ function getDiffKeyForMode(mode) {
   return mode === "available" ? "Diff_ATS" : "Diff_OH";
 }
 
-function escapeHtml(s) {
-  return String(s ?? "")
-    .replace(/&/g,"&amp;")
-    .replace(/</g,"&lt;")
-    .replace(/>/g,"&gt;")
-    .replace(/"/g,"&quot;");
-}
-
 function normalizeRow(r) {
-  const inv0 = (r?.Inventory?.length) ? r.Inventory[0] : {};
+  const inv0 = (r && r.Inventory && r.Inventory.length) ? r.Inventory[0]
+              : (r && r.inventory && r.inventory.length ? r.inventory[0] : {});
   return {
-    brand: r.Brand || "",
-    season: r.Season || "",
-    style: r.Style || "",
-    sku: r.SKU || "",
+    brand: r.Brand || r.brand || "",
+    season: r.Season || r.season || "",
+    style: r.Style || r.style || "",
+    sku: r.SKU || r.sku || "",
     inv: inv0 || {}
   };
+}
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function toNumberOrNull(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return isNaN(n) ? null : n;
+}
+
+function getStackedHeaderParts(label, mode) {
+  const s = String(label || "");
+  const metric = (mode === "available") ? "ATS" : "On Hand";
+
+  if (s === "Diff_OH" || s === "Diff_ATS") {
+    return { l1: "Diff", l2: "", l3: (mode === "available") ? "ATS" : "On-Hand" };
+  }
+
+  const metricPos = s.indexOf(metric);
+  if (metricPos >= 0) {
+    const left = s.substring(0, metricPos).trim();
+    const right = s.substring(metricPos).trim();
+    const leftParts = left.split(/\s+/);
+    return {
+      l1: leftParts[0] || s,
+      l2: leftParts.slice(1).join(" ") || "",
+      l3: right.replace("On Hand", "On-Hand")
+    };
+  }
+
+  return { l1: s, l2: "", l3: "" };
+}
+
+function renderHeaderLabel(colLabel, mode) {
+  if (colLabel === "Brand" || colLabel === "Season" || colLabel === "Style" || colLabel === "SKU") {
+    return escapeHtml(colLabel);
+  }
+
+  const p = getStackedHeaderParts(colLabel, mode);
+  return (
+    '<div class="th-stack">' +
+      '<div class="l1">' + escapeHtml(p.l1) + '</div>' +
+      (p.l2 ? '<div class="l2">' + escapeHtml(p.l2) + '</div>' : '<div class="l2"></div>') +
+      (p.l3 ? '<div class="l3">' + escapeHtml(p.l3) + '</div>' : '<div class="l3"></div>') +
+    '</div>'
+  );
+}
+
+function updateBrandCacheFromRows(rowsNormalized) {
+  rowsNormalized.forEach(r => {
+    const b = String(r.brand || "").trim();
+    if (!b) return;
+    brandCache[b] = true;
+  });
+}
+
+function renderBrandDropdown() {
+  const sel = document.getElementById("brandSelect");
+  const current = selectedBrand;
+
+  sel.innerHTML = "";
+  const optAll = document.createElement("option");
+  optAll.value = "__ALL__";
+  optAll.textContent = "All Brands";
+  sel.appendChild(optAll);
+
+  const brands = Object.keys(brandCache).sort(function(a,b){ return a.localeCompare(b); });
+  brands.forEach(b => {
+    const o = document.createElement("option");
+    o.value = b;
+    o.textContent = b;
+    sel.appendChild(o);
+  });
+
+  sel.value = current;
+  if (sel.value !== current) {
+    selectedBrand = "__ALL__";
+    sel.value = "__ALL__";
+  }
+}
+
+function rowMatchesSelectedBrand(r) {
+  if (!selectedBrand || selectedBrand === "__ALL__") return true;
+  return normStr(r.brand) === normStr(selectedBrand);
+}
+
+function keyAllowedForSelectedBrand(k) {
+  if (!selectedBrand || selectedBrand === "__ALL__") return true;
+
+  if (k === "NetSuite Total On Hand" || k === "Snap Total On Hand" || k === "Diff_OH") return true;
+  if (k === "NetSuite Total ATS" || k === "Snap Total ATS" || k === "Diff_ATS") return true;
+
+  const prefix = String(selectedBrand).trim() + " ";
+  return String(k || "").indexOf(prefix) === 0;
+}
+
+function buildColumnsFromRows(rowsNormalized) {
+  const mode = getCompareMode();
+  const diffKey = getDiffKeyForMode(mode);
+
+  const keySet = {};
+  rowsNormalized.forEach(r => {
+    const inv = r.inv || {};
+    Object.keys(inv).forEach(k => { keySet[k] = true; });
+  });
+
+  function keyMatchesMode(k) {
+    const kk = String(k || "");
+
+    const isDiff = (kk === "Diff_OH" || kk === "Diff_ATS");
+    if (isDiff) return kk === diffKey;
+
+    const hasOnHand = kk.indexOf("On Hand") >= 0;
+    const hasATS = kk.indexOf("ATS") >= 0;
+
+    if (mode === "available") return hasATS;
+    return hasOnHand;
+  }
+
+  const allKeys = Object.keys(keySet).filter(function(k){
+    return keyMatchesMode(k) && keyAllowedForSelectedBrand(k);
+  });
+
+  const preferredOrderOnHand = ["NetSuite Total On Hand","Snap Total On Hand","Diff_OH"];
+  const preferredOrderATS = ["NetSuite Total ATS","Snap Total ATS","Diff_ATS"];
+  const preferredOrder = (mode === "available") ? preferredOrderATS : preferredOrderOnHand;
+
+  const preferred = [];
+  preferredOrder.forEach(k => { if (allKeys.indexOf(k) >= 0) preferred.push(k); });
+
+  const remaining = allKeys.filter(k => preferred.indexOf(k) === -1);
+  remaining.sort(function(a,b){ return a.localeCompare(b); });
+
+  dynamicInvKeys = preferred.concat(remaining);
+
+  visibleColumns = [
+    { key: "brand", label: "Brand", sortKey: "brand" },
+    { key: "season", label: "Season", sortKey: "season" },
+    { key: "style", label: "Style", sortKey: "style" },
+    { key: "sku", label: "SKU", sortKey: "sku", thClass: "col-sku" }
+  ];
+
+  dynamicInvKeys.forEach(k => {
+    visibleColumns.push({ key: k, label: k, sortKey: k });
+  });
+}
+
+function updateSortIndicators() {
+  visibleColumns.forEach(col => {
+    const el = document.getElementById("si-" + col.sortKey);
+    if (!el) return;
+    el.textContent = (sortField === col.sortKey) ? (sortDir === "asc" ? "▲" : "▼") : "";
+  });
+}
+
+function setSort(field) {
+  if (sortField === field) sortDir = (sortDir === "asc") ? "desc" : "asc";
+  else { sortField = field; sortDir = "desc"; }
+  page = 1;
+  updateSortIndicators();
+  loadRows();
+}
+
+function applyFilterStyling() {
+  const mapping = [
+    { id: "fBrand", key: "brand", thKey: "brand" },
+    { id: "fSeason", key: "season", thKey: "season" },
+    { id: "fStyle", key: "style", thKey: "style" },
+    { id: "fSku", key: "sku", thKey: "sku" }
+  ];
+
+  mapping.forEach(m => {
+    const input = document.getElementById(m.id);
+    const th = document.getElementById("th-" + m.thKey);
+    const active = String(filters[m.key] || "").trim().length > 0;
+
+    if (input) input.classList.toggle("active-filter", active);
+    if (th) th.classList.toggle("has-filter", active);
+  });
+}
+
+function clearAllFilters() {
+  justCleared = true;
+  setTimeout(() => { justCleared = false; }, 600);
+
+  filters.brand = "";
+  filters.season = "";
+  filters.style = "";
+  filters.sku = "";
+
+  ["fBrand","fSeason","fStyle","fSku"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+
+  applyFilterStyling();
+  page = 1;
+  loadRows();
+}
+
+function renderHeader() {
+  const thead = document.getElementById("thead");
+  thead.innerHTML = "";
+
+  const mode = getCompareMode();
+  const tr1 = document.createElement("tr");
+
+  visibleColumns.forEach(col => {
+    const th = document.createElement("th");
+    if (col.thClass) th.className = col.thClass;
+
+    const isBase = (col.key === "brand" || col.key === "season" || col.key === "style" || col.key === "sku");
+    if (isBase) th.id = "th-" + col.key;
+
+    let isFiltered = false;
+    if (col.key === "brand") isFiltered = String(filters.brand || "").trim().length > 0;
+    else if (col.key === "season") isFiltered = String(filters.season || "").trim().length > 0;
+    else if (col.key === "style") isFiltered = String(filters.style || "").trim().length > 0;
+    else if (col.key === "sku") isFiltered = String(filters.sku || "").trim().length > 0;
+
+    const badge = (isBase && isFiltered) ? `<span class="filter-badge">🔎</span>` : "";
+
+    th.innerHTML =
+      `<span class="th-btn" data-sort="${escapeHtml(col.sortKey)}">` +
+        `${renderHeaderLabel(col.label, mode)}${badge} ` +
+        `<span id="si-${escapeHtml(col.sortKey)}" class="sort-ind"></span>` +
+      `</span>`;
+
+    tr1.appendChild(th);
+  });
+
+  thead.appendChild(tr1);
+
+  const tr2 = document.createElement("tr");
+  tr2.className = "filter-row";
+
+  visibleColumns.forEach(col => {
+    const th = document.createElement("th");
+    if (col.thClass) th.className = col.thClass;
+
+    if (col.key === "brand") th.innerHTML = `<input id="fBrand" name="fBrand" autocomplete="off" class="filter-input" placeholder="Filter brand…" />`;
+    else if (col.key === "season") th.innerHTML = `<input id="fSeason" name="fSeason" autocomplete="off" class="filter-input" placeholder="Filter season…" />`;
+    else if (col.key === "style") th.innerHTML = `<input id="fStyle" name="fStyle" autocomplete="off" class="filter-input" placeholder="Filter style…" />`;
+    else if (col.key === "sku") th.innerHTML = `<input id="fSku" name="fSku" autocomplete="off" class="filter-input" placeholder="Filter SKU…" />`;
+    else th.innerHTML = "";
+
+    tr2.appendChild(th);
+  });
+
+  thead.appendChild(tr2);
+
+  thead.querySelectorAll(".th-btn").forEach(el => {
+    el.addEventListener("click", () => setSort(el.getAttribute("data-sort")));
+  });
+
+  if (document.getElementById("fBrand")) document.getElementById("fBrand").value = filters.brand;
+  if (document.getElementById("fSeason")) document.getElementById("fSeason").value = filters.season;
+  if (document.getElementById("fStyle")) document.getElementById("fStyle").value = filters.style;
+  if (document.getElementById("fSku")) document.getElementById("fSku").value = filters.sku;
+
+  function syncFiltersFromInputs() {
+    filters.brand = (document.getElementById("fBrand") && document.getElementById("fBrand").value) || "";
+    filters.season = (document.getElementById("fSeason") && document.getElementById("fSeason").value) || "";
+    filters.style = (document.getElementById("fStyle") && document.getElementById("fStyle").value) || "";
+    filters.sku = (document.getElementById("fSku") && document.getElementById("fSku").value) || "";
+  }
+
+  ["fBrand","fSeason","fStyle","fSku"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    el.addEventListener("input", () => {
+      syncFiltersFromInputs();
+      applyFilterStyling();
+    });
+
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        syncFiltersFromInputs();
+        applyFilterStyling();
+        page = 1;
+        loadRows();
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        el.value = "";
+        syncFiltersFromInputs();
+        applyFilterStyling();
+      }
+    });
+  });
+
+  updateSortIndicators();
+  applyFilterStyling();
 }
 
 async function loadSnapshots() {
@@ -121,12 +455,19 @@ async function loadSnapshots() {
   const data = await res.json();
   const sel = document.getElementById("snapshots");
   sel.innerHTML = "";
-  data.forEach(s => {
+
+  if (data && data.length) {
+    data.forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s.snapshotId;
+      opt.textContent = `${new Date(s.snapshotDate).toLocaleDateString()} (${s.rowCount})`;
+      sel.appendChild(opt);
+    });
+  } else {
     const opt = document.createElement("option");
-    opt.value = s.snapshotId;
-    opt.textContent = `${new Date(s.snapshotDate).toLocaleDateString()} (${s.rowCount})`;
+    opt.textContent = "No snapshots found";
     sel.appendChild(opt);
-  });
+  }
 }
 
 async function loadRows() {
@@ -135,6 +476,11 @@ async function loadRows() {
 
   const mode = getCompareMode();
   const diffKey = getDiffKeyForMode(mode);
+
+  if (!sortField || sortField === "Diff_OH" || sortField === "Diff_ATS") {
+    sortField = diffKey;
+  }
+
   const onlyDiff = document.getElementById("onlyDiff").checked ? "1" : "0";
 
   const qs = new URLSearchParams({
@@ -149,31 +495,91 @@ async function loadRows() {
     onlyDiff
   });
 
-  qs.set("format","new");
+  qs.set("format", "new");
 
   const res = await fetch(`${API_BASE}/snapshots/${snapshotId}/rows?` + qs.toString());
   const data = await res.json();
 
-  const rows = (data.rows || []).map(normalizeRow);
+  let rowsNormalized = (data.rows || []).map(normalizeRow);
+
+  updateBrandCacheFromRows(rowsNormalized);
+  renderBrandDropdown();
+
+  if (selectedBrand !== "__ALL__") {
+    rowsNormalized = rowsNormalized.filter(rowMatchesSelectedBrand);
+  }
+
+  if (document.getElementById("onlyDiff").checked) {
+    rowsNormalized = rowsNormalized.filter(r => {
+      const v = (r.inv && r.inv[diffKey]) != null ? Number(r.inv[diffKey]) : 0;
+      return v !== 0;
+    });
+  }
+
+  buildColumnsFromRows(rowsNormalized);
+  renderHeader();
+
+  const brandLabel = (selectedBrand === "__ALL__") ? "All Brands" : selectedBrand;
+
+  document.getElementById("meta").textContent =
+    `Total rows: ${data.total} | Sort: ${sortField}_${sortDir} | Mode: ${mode} | Diff field: ${diffKey} | Brand view: ${brandLabel} | Filters apply on Enter`;
 
   const tbody = document.getElementById("rows");
   tbody.innerHTML = "";
 
-  rows.forEach(r => {
+  rowsNormalized.forEach(r => {
+    const inv = r.inv || {};
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${escapeHtml(r.brand)}</td>
-      <td>${escapeHtml(r.season)}</td>
-      <td>${escapeHtml(r.style)}</td>
-      <td class="col-sku">${escapeHtml(r.sku)}</td>
-    `;
+
+    let html = "";
+    html += `<td>${escapeHtml(r.brand)}</td>`;
+    html += `<td>${escapeHtml(r.season)}</td>`;
+    html += `<td>${escapeHtml(r.style)}</td>`;
+    html += `<td class="col-sku">${escapeHtml(r.sku)}</td>`;
+
+    dynamicInvKeys.forEach(k => {
+      const v = inv[k];
+      const isDiffCol = (k === "Diff_OH" || k === "Diff_ATS");
+      const n = toNumberOrNull(v);
+
+      if (isDiffCol) {
+        const dv = (toNumberOrNull(v) ?? 0);
+        const c = dv === 0 ? "#15803d" : (dv > 0 ? "#b45309" : "#b91c1c");
+        html += `<td class="num" style="font-weight:700;color:${c};">${escapeHtml(dv)}</td>`;
+      } else if (n !== null) {
+        html += `<td class="num">${escapeHtml(n)}</td>`;
+      } else {
+        html += `<td>${escapeHtml(v)}</td>`;
+      }
+    });
+
+    tr.innerHTML = html;
     tbody.appendChild(tr);
   });
 
-  document.getElementById("meta").textContent =
-    `Total rows: ${data.total} | Mode: ${mode}`;
+  applyFilterStyling();
 }
 
+window.addEventListener("pageshow", () => {
+  if (justCleared) return;
+
+  const b = document.getElementById("fBrand");
+  const s = document.getElementById("fSeason");
+  const st = document.getElementById("fStyle");
+  const k = document.getElementById("fSku");
+
+  if (b || s || st || k) {
+    filters.brand = (b && b.value) || filters.brand || "";
+    filters.season = (s && s.value) || filters.season || "";
+    filters.style = (st && st.value) || filters.style || "";
+    filters.sku = (k && k.value) || filters.sku || "";
+    applyFilterStyling();
+  }
+});
+
+/* =========================
+   CHANGED: Export helpers
+   ========================= */
 function buildExportQueryParams(fileType) {
   const snapshotId = document.getElementById("snapshots").value;
   const onlyDiff = document.getElementById("onlyDiff").checked ? "1" : "0";
@@ -189,10 +595,11 @@ function buildExportQueryParams(fileType) {
     onlyDiff
   });
 
-  qs.set("format","new");
-  qs.set("file", fileType);
+  qs.set("format", "new");
+  qs.set("file", fileType); // csv | xlsx
 
-  if (selectedBrand !== "__ALL__") {
+  // exact brand selection dropdown (matches the table view)
+  if (selectedBrand && selectedBrand !== "__ALL__") {
     qs.set("brandView", selectedBrand);
   }
 
@@ -200,33 +607,52 @@ function buildExportQueryParams(fileType) {
 }
 
 async function exportFile(fileType) {
+  const snapshotId = document.getElementById("snapshots").value;
+  if (!snapshotId) return;
+
   const qs = buildExportQueryParams(fileType);
 
   const res = await fetch(`${API_BASE}/export?` + qs.toString());
   if (!res.ok) {
-    alert("Export failed");
+    const txt = await res.text();
+    alert("Export failed: " + txt);
     return;
   }
 
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
+
   const a = document.createElement("a");
   a.href = url;
-  a.download = `inventory-export-${getCompareMode()}.${fileType}`;
+
+  const ext = (fileType === "xlsx") ? "xlsx" : "csv";
+  a.download = `inventory-export-${getCompareMode()}.${ext}`;
+
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
 }
+/* ========================= */
 
+document.getElementById("clearFilters").addEventListener("click", clearAllFilters);
+
+// CHANGED: new button IDs
 document.getElementById("exportCsv").addEventListener("click", () => exportFile("csv"));
 document.getElementById("exportXlsx").addEventListener("click", () => exportFile("xlsx"));
 
-document.getElementById("snapshots").addEventListener("change", loadRows);
-document.getElementById("onlyDiff").addEventListener("change", loadRows);
-document.querySelectorAll('input[name="compareMode"]').forEach(r =>
-  r.addEventListener("change", loadRows)
-);
+document.getElementById("snapshots").addEventListener("change", () => { page = 1; loadRows(); });
+document.getElementById("onlyDiff").addEventListener("change", () => { page = 1; loadRows(); });
+
+document.getElementById("brandSelect").addEventListener("change", () => {
+  selectedBrand = document.getElementById("brandSelect").value || "__ALL__";
+  page = 1;
+  loadRows();
+});
+
+document.querySelectorAll('input[name="compareMode"]').forEach(r => {
+  r.addEventListener("change", () => { page = 1; loadRows(); });
+});
 
 (async () => {
   await loadSnapshots();
