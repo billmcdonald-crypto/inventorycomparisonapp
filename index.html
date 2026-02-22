@@ -23,11 +23,7 @@
     }
     .sort-ind { font-size: 11px; opacity: 0.7; }
     .filter-row th { background: #fafafa; }
-    .filter-input {
-      width: 100%;
-      box-sizing: border-box;
-      padding: 5px;
-    }
+    .filter-input { width: 100%; box-sizing: border-box; padding: 5px; }
     .muted { color: #666; font-size: 12px; }
 
     /* Keep SKU from wrapping and keep a usable width */
@@ -39,42 +35,19 @@
     }
 
     /* Stacked inventory header lines */
-    .th-stack {
-      line-height: 1.05;
-      text-align: center;
-      white-space: nowrap;
-    }
+    .th-stack { line-height: 1.05; text-align: center; white-space: nowrap; }
     .th-stack .l1 { font-weight: 700; }
     .th-stack .l2 { font-weight: 600; font-size: 12px; opacity: 0.9; }
     .th-stack .l3 { font-weight: 600; font-size: 12px; opacity: 0.9; }
 
     /* Sticky header */
-    thead th {
-      position: sticky;
-      top: 0;
-      z-index: 3;
-      background: #f3f3f3;
-    }
-    .filter-row th {
-      position: sticky;
-      top: 38px;
-      z-index: 2;
-      background: #fafafa;
-    }
+    thead th { position: sticky; top: 0; z-index: 3; background: #f3f3f3; }
+    .filter-row th { position: sticky; top: 38px; z-index: 2; background: #fafafa; }
 
     /* Active filter styling */
-    .filter-input.active-filter {
-      outline: 2px solid #2563eb;
-      background: #eff6ff;
-    }
-    th.has-filter {
-      background: #fff7ed !important;
-    }
-    .filter-badge {
-      margin-left: 6px;
-      font-size: 12px;
-      opacity: 0.85;
-    }
+    .filter-input.active-filter { outline: 2px solid #2563eb; background: #eff6ff; }
+    th.has-filter { background: #fff7ed !important; }
+    .filter-badge { margin-left: 6px; font-size: 12px; opacity: 0.85; }
   </style>
 </head>
 
@@ -84,6 +57,10 @@
 
 <div class="row">
   <select id="snapshots"></select>
+
+  <select id="brandSelect">
+    <option value="__ALL__">All Brands</option>
+  </select>
 
   <label class="mode">
     <input type="radio" name="compareMode" value="onHand" checked />
@@ -130,6 +107,10 @@ const filters = { brand: "", season: "", style: "", sku: "" };
 
 let justCleared = false;
 
+// Brand dropdown state
+let selectedBrand = "__ALL__";           // "__ALL__" means no brand filtering
+const brandCache = {};                  // { "Ashworth": true, ... }
+
 function debounce(fn, ms) {
   let t;
   return function() {
@@ -137,6 +118,10 @@ function debounce(fn, ms) {
     const args = arguments;
     t = setTimeout(() => fn.apply(null, args), ms);
   };
+}
+
+function normStr(s) {
+  return String(s == null ? "" : s).trim().toLowerCase();
 }
 
 function getCompareMode() {
@@ -187,7 +172,6 @@ function getStackedHeaderParts(label, mode) {
     const left = s.substring(0, metricPos).trim();
     const right = s.substring(metricPos).trim();
     const leftParts = left.split(/\s+/);
-
     return {
       l1: leftParts[0] || s,
       l2: leftParts.slice(1).join(" ") || "",
@@ -213,6 +197,59 @@ function renderHeaderLabel(colLabel, mode) {
   );
 }
 
+function updateBrandCacheFromRows(rowsNormalized) {
+  rowsNormalized.forEach(r => {
+    const b = String(r.brand || "").trim();
+    if (!b) return;
+    brandCache[b] = true;
+  });
+}
+
+function renderBrandDropdown() {
+  const sel = document.getElementById("brandSelect");
+  const current = selectedBrand;
+
+  // rebuild options (All + sorted brands)
+  sel.innerHTML = "";
+  const optAll = document.createElement("option");
+  optAll.value = "__ALL__";
+  optAll.textContent = "All Brands";
+  sel.appendChild(optAll);
+
+  const brands = Object.keys(brandCache).sort(function(a,b){ return a.localeCompare(b); });
+  brands.forEach(b => {
+    const o = document.createElement("option");
+    o.value = b;
+    o.textContent = b;
+    sel.appendChild(o);
+  });
+
+  // restore selection if possible, else fallback to All
+  sel.value = current;
+  if (sel.value !== current) {
+    selectedBrand = "__ALL__";
+    sel.value = "__ALL__";
+  }
+}
+
+function rowMatchesSelectedBrand(r) {
+  if (!selectedBrand || selectedBrand === "__ALL__") return true;
+  return normStr(r.brand) === normStr(selectedBrand);
+}
+
+function keyAllowedForSelectedBrand(k) {
+  if (!selectedBrand || selectedBrand === "__ALL__") return true;
+
+  // Always keep totals/diff visible
+  if (k === "NetSuite Total On Hand" || k === "Snap Total On Hand" || k === "Diff_OH") return true;
+  if (k === "NetSuite Total ATS" || k === "Snap Total ATS" || k === "Diff_ATS") return true;
+
+  // Brand-specific inventory columns are typically "Brand Something Metric"
+  // ex: "Ashworth B2B On Hand" starts with "Ashworth "
+  const prefix = String(selectedBrand).trim() + " ";
+  return String(k || "").indexOf(prefix) === 0;
+}
+
 function buildColumnsFromRows(rowsNormalized) {
   const mode = getCompareMode();
   const diffKey = getDiffKeyForMode(mode);
@@ -225,6 +262,7 @@ function buildColumnsFromRows(rowsNormalized) {
 
   function keyMatchesMode(k) {
     const kk = String(k || "");
+
     const isDiff = (kk === "Diff_OH" || kk === "Diff_ATS");
     if (isDiff) return kk === diffKey;
 
@@ -235,10 +273,13 @@ function buildColumnsFromRows(rowsNormalized) {
     return hasOnHand;
   }
 
-  const allKeys = Object.keys(keySet).filter(keyMatchesMode);
+  // mode filter + brand column filter
+  const allKeys = Object.keys(keySet).filter(function(k){
+    return keyMatchesMode(k) && keyAllowedForSelectedBrand(k);
+  });
 
-  const preferredOrderOnHand = ["NetSuite Total On Hand", "Snap Total On Hand", "Diff_OH"];
-  const preferredOrderATS = ["NetSuite Total ATS", "Snap Total ATS", "Diff_ATS"];
+  const preferredOrderOnHand = ["NetSuite Total On Hand","Snap Total On Hand","Diff_OH"];
+  const preferredOrderATS = ["NetSuite Total ATS","Snap Total ATS","Diff_ATS"];
   const preferredOrder = (mode === "available") ? preferredOrderATS : preferredOrderOnHand;
 
   const preferred = [];
@@ -414,7 +455,7 @@ function renderHeader() {
 
   updateSortIndicators();
   applyFilterStyling();
-} // <-- THIS was missing in your version 🙂
+}
 
 async function loadSnapshots() {
   const res = await fetch(`${API_BASE}/snapshots`);
@@ -468,6 +509,16 @@ async function loadRows() {
 
   let rowsNormalized = (data.rows || []).map(normalizeRow);
 
+  // Update dropdown brand options (cache + render)
+  updateBrandCacheFromRows(rowsNormalized);
+  renderBrandDropdown();
+
+  // Apply brand selection filtering to rows
+  if (selectedBrand !== "__ALL__") {
+    rowsNormalized = rowsNormalized.filter(rowMatchesSelectedBrand);
+  }
+
+  // Client-side only differences filter
   if (document.getElementById("onlyDiff").checked) {
     rowsNormalized = rowsNormalized.filter(r => {
       const v = (r.inv && r.inv[diffKey]) != null ? Number(r.inv[diffKey]) : 0;
@@ -478,8 +529,10 @@ async function loadRows() {
   buildColumnsFromRows(rowsNormalized);
   renderHeader();
 
+  const brandLabel = (selectedBrand === "__ALL__") ? "All Brands" : selectedBrand;
+
   document.getElementById("meta").textContent =
-    `Total rows: ${data.total} | Sort: ${sortField}_${sortDir} | Mode: ${mode} | Diff field: ${diffKey} | Filters apply on Enter`;
+    `Total rows: ${data.total} | Sort: ${sortField}_${sortDir} | Mode: ${mode} | Diff field: ${diffKey} | Brand view: ${brandLabel} | Filters apply on Enter`;
 
   const tbody = document.getElementById("rows");
   tbody.innerHTML = "";
@@ -570,6 +623,12 @@ document.getElementById("clearFilters").addEventListener("click", clearAllFilter
 document.getElementById("export").addEventListener("click", exportCsv);
 document.getElementById("snapshots").addEventListener("change", () => { page = 1; loadRows(); });
 document.getElementById("onlyDiff").addEventListener("change", () => { page = 1; loadRows(); });
+
+document.getElementById("brandSelect").addEventListener("change", () => {
+  selectedBrand = document.getElementById("brandSelect").value || "__ALL__";
+  page = 1;
+  loadRows();
+});
 
 document.querySelectorAll('input[name="compareMode"]').forEach(r => {
   r.addEventListener("change", () => { page = 1; loadRows(); });
