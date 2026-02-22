@@ -35,7 +35,7 @@
       white-space: nowrap;
       word-break: normal;
       overflow-wrap: normal;
-      min-width: 160px; /* tweak to taste */
+      min-width: 160px;
     }
 
     /* Stacked inventory header lines */
@@ -57,18 +57,18 @@
     }
     .filter-row th {
       position: sticky;
-      top: 38px; /* adjust if needed */
+      top: 38px;
       z-index: 2;
       background: #fafafa;
     }
 
-    /* Active filter styling (very obvious) */
+    /* Active filter styling */
     .filter-input.active-filter {
       outline: 2px solid #2563eb;
       background: #eff6ff;
     }
     th.has-filter {
-      background: #fff7ed !important; /* light amber */
+      background: #fff7ed !important;
     }
     .filter-badge {
       margin-left: 6px;
@@ -107,7 +107,6 @@
 
 <div id="meta" class="muted"></div>
 
-<!-- Scroll container so sticky headers behave consistently -->
 <div style="overflow:auto; max-height: 70vh;">
   <table>
     <thead id="thead"></thead>
@@ -121,21 +120,14 @@ const API_BASE = "/api";
 let page = 1;
 const pageSize = 100;
 
-let sortField = "";   // will default to Diff_OH / Diff_ATS based on mode
+let sortField = "";
 let sortDir = "desc";
 
-let dynamicInvKeys = [];   // union of Inventory[0] keys across returned rows (page)
-let visibleColumns = [];   // rendered columns (base + inv keys in stable order)
+let dynamicInvKeys = [];
+let visibleColumns = [];
 
-/* Persist filters between rerenders + mode toggles */
-const filters = {
-  brand: "",
-  season: "",
-  style: "",
-  sku: ""
-};
+const filters = { brand: "", season: "", style: "", sku: "" };
 
-/* Helps prevent Safari/pageshow from resurrecting filter values right after clearing */
 let justCleared = false;
 
 function debounce(fn, ms) {
@@ -157,8 +149,8 @@ function getDiffKeyForMode(mode) {
 }
 
 function normalizeRow(r) {
-  // Accept either Brand/Season/Style/SKU casing OR legacy casing if it sneaks in.
-  const inv0 = (r && r.Inventory && r.Inventory.length) ? r.Inventory[0] : (r && r.inventory && r.inventory.length ? r.inventory[0] : {});
+  const inv0 = (r && r.Inventory && r.Inventory.length) ? r.Inventory[0]
+              : (r && r.inventory && r.inventory.length ? r.inventory[0] : {});
   return {
     brand: r.Brand || r.brand || "",
     season: r.Season || r.season || "",
@@ -182,26 +174,18 @@ function toNumberOrNull(v) {
   return isNaN(n) ? null : n;
 }
 
-/* Turns:
-   "Ashworth B2B On Hand" -> Ashworth / B2B / On-Hand
-*/
 function getStackedHeaderParts(label, mode) {
   const s = String(label || "");
   const metric = (mode === "available") ? "ATS" : "On Hand";
 
-  // Diff columns: show Diff + metric
   if (s === "Diff_OH" || s === "Diff_ATS") {
-    return {
-      l1: "Diff",
-      l2: "",
-      l3: (mode === "available") ? "ATS" : "On-Hand"
-    };
+    return { l1: "Diff", l2: "", l3: (mode === "available") ? "ATS" : "On-Hand" };
   }
 
   const metricPos = s.indexOf(metric);
   if (metricPos >= 0) {
-    const left = s.substring(0, metricPos).trim();      // e.g. "Ashworth B2B"
-    const right = s.substring(metricPos).trim();        // e.g. "On Hand" or "ATS"
+    const left = s.substring(0, metricPos).trim();
+    const right = s.substring(metricPos).trim();
     const leftParts = left.split(/\s+/);
 
     return {
@@ -215,12 +199,10 @@ function getStackedHeaderParts(label, mode) {
 }
 
 function renderHeaderLabel(colLabel, mode) {
-  // Base columns stay one-line.
   if (colLabel === "Brand" || colLabel === "Season" || colLabel === "Style" || colLabel === "SKU") {
     return escapeHtml(colLabel);
   }
 
-  // Inventory columns -> stacked
   const p = getStackedHeaderParts(colLabel, mode);
   return (
     '<div class="th-stack">' +
@@ -232,10 +214,9 @@ function renderHeaderLabel(colLabel, mode) {
 }
 
 function buildColumnsFromRows(rowsNormalized) {
-  const mode = getCompareMode();              // "onHand" or "available"
-  const diffKey = getDiffKeyForMode(mode);    // "Diff_OH" or "Diff_ATS"
+  const mode = getCompareMode();
+  const diffKey = getDiffKeyForMode(mode);
 
-  // Union keys across the current page’s inventory objects
   const keySet = {};
   rowsNormalized.forEach(r => {
     const inv = r.inv || {};
@@ -244,7 +225,6 @@ function buildColumnsFromRows(rowsNormalized) {
 
   function keyMatchesMode(k) {
     const kk = String(k || "");
-
     const isDiff = (kk === "Diff_OH" || kk === "Diff_ATS");
     if (isDiff) return kk === diffKey;
 
@@ -257,25 +237,12 @@ function buildColumnsFromRows(rowsNormalized) {
 
   const allKeys = Object.keys(keySet).filter(keyMatchesMode);
 
-  // Stable ordering: totals + diff first, then the rest alphabetical
-  const preferredOrderOnHand = [
-    "NetSuite Total On Hand",
-    "Snap Total On Hand",
-    "Diff_OH"
-  ];
-
-  const preferredOrderATS = [
-    "NetSuite Total ATS",
-    "Snap Total ATS",
-    "Diff_ATS"
-  ];
-
+  const preferredOrderOnHand = ["NetSuite Total On Hand", "Snap Total On Hand", "Diff_OH"];
+  const preferredOrderATS = ["NetSuite Total ATS", "Snap Total ATS", "Diff_ATS"];
   const preferredOrder = (mode === "available") ? preferredOrderATS : preferredOrderOnHand;
 
   const preferred = [];
-  preferredOrder.forEach(k => {
-    if (allKeys.indexOf(k) >= 0) preferred.push(k);
-  });
+  preferredOrder.forEach(k => { if (allKeys.indexOf(k) >= 0) preferred.push(k); });
 
   const remaining = allKeys.filter(k => preferred.indexOf(k) === -1);
   remaining.sort(function(a,b){ return a.localeCompare(b); });
@@ -303,12 +270,8 @@ function updateSortIndicators() {
 }
 
 function setSort(field) {
-  if (sortField === field) {
-    sortDir = sortDir === "asc" ? "desc" : "asc";
-  } else {
-    sortField = field;
-    sortDir = "desc";
-  }
+  if (sortField === field) sortDir = (sortDir === "asc") ? "desc" : "asc";
+  else { sortField = field; sortDir = "desc"; }
   page = 1;
   updateSortIndicators();
   loadRows();
@@ -341,7 +304,6 @@ function clearAllFilters() {
   filters.style = "";
   filters.sku = "";
 
-  // clear DOM immediately (if inputs exist)
   ["fBrand","fSeason","fStyle","fSku"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = "";
@@ -359,7 +321,6 @@ function renderHeader() {
 
   const mode = getCompareMode();
 
-  // Row 1: headers + sort + filter badge
   const tr1 = document.createElement("tr");
 
   visibleColumns.forEach(col => {
@@ -369,7 +330,6 @@ function renderHeader() {
     const isBase = (col.key === "brand" || col.key === "season" || col.key === "style" || col.key === "sku");
     if (isBase) th.id = "th-" + col.key;
 
-    // Determine if this base column has an active filter
     let isFiltered = false;
     if (col.key === "brand") isFiltered = String(filters.brand || "").trim().length > 0;
     else if (col.key === "season") isFiltered = String(filters.season || "").trim().length > 0;
@@ -389,7 +349,6 @@ function renderHeader() {
 
   thead.appendChild(tr1);
 
-  // Row 2: filters (base columns only)
   const tr2 = document.createElement("tr");
   tr2.className = "filter-row";
 
@@ -408,21 +367,18 @@ function renderHeader() {
 
   thead.appendChild(tr2);
 
-  // Wire sort clicks
+  // Sort clicks
   thead.querySelectorAll(".th-btn").forEach(el => {
     el.addEventListener("click", () => setSort(el.getAttribute("data-sort")));
   });
 
-  // Rehydrate filter input values from persisted filters object
+  // Rehydrate filter inputs from persisted filters object
   if (document.getElementById("fBrand")) document.getElementById("fBrand").value = filters.brand;
   if (document.getElementById("fSeason")) document.getElementById("fSeason").value = filters.season;
   if (document.getElementById("fStyle")) document.getElementById("fStyle").value = filters.style;
   if (document.getElementById("fSku")) document.getElementById("fSku").value = filters.sku;
 
-  // Wire filter events:
-  // - On input: update filter state + highlight, but DON'T reload
-  // - On Enter: apply (reload)
-  // - On Escape: clear that one field (optional but nice)
+  // Filter behavior: type freely, apply on Enter
   function syncFiltersFromInputs() {
     filters.brand = (document.getElementById("fBrand") && document.getElementById("fBrand").value) || "";
     filters.season = (document.getElementById("fSeason") && document.getElementById("fSeason").value) || "";
@@ -434,14 +390,11 @@ function renderHeader() {
     const el = document.getElementById(id);
     if (!el) return;
 
-    // Keep state + indicator in sync while typing
     el.addEventListener("input", () => {
       syncFiltersFromInputs();
       applyFilterStyling();
-      // no loadRows here
     });
 
-    // Apply on Enter
     el.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
@@ -450,8 +403,6 @@ function renderHeader() {
         page = 1;
         loadRows();
       }
-
-      // Optional: ESC clears this one input
       if (e.key === "Escape") {
         e.preventDefault();
         el.value = "";
@@ -460,6 +411,10 @@ function renderHeader() {
       }
     });
   });
+
+  updateSortIndicators();
+  applyFilterStyling();
+} // <-- THIS was missing in your version 🙂
 
 async function loadSnapshots() {
   const res = await fetch(`${API_BASE}/snapshots`);
@@ -488,7 +443,6 @@ async function loadRows() {
   const mode = getCompareMode();
   const diffKey = getDiffKeyForMode(mode);
 
-  // Default sort to the right diff key if unset or if it was the other mode’s diff
   if (!sortField || sortField === "Diff_OH" || sortField === "Diff_ATS") {
     sortField = diffKey;
   }
@@ -514,7 +468,6 @@ async function loadRows() {
 
   let rowsNormalized = (data.rows || []).map(normalizeRow);
 
-  // Client-side "only differences" filter (backend may or may not implement)
   if (document.getElementById("onlyDiff").checked) {
     rowsNormalized = rowsNormalized.filter(r => {
       const v = (r.inv && r.inv[diffKey]) != null ? Number(r.inv[diffKey]) : 0;
@@ -526,7 +479,7 @@ async function loadRows() {
   renderHeader();
 
   document.getElementById("meta").textContent =
-    `Total rows: ${data.total} | Sort: ${sortField}_${sortDir} | Mode: ${mode} | Diff field: ${diffKey}`;
+    `Total rows: ${data.total} | Sort: ${sortField}_${sortDir} | Mode: ${mode} | Diff field: ${diffKey} | Filters apply on Enter`;
 
   const tbody = document.getElementById("rows");
   tbody.innerHTML = "";
@@ -567,7 +520,6 @@ async function loadRows() {
 window.addEventListener("pageshow", () => {
   if (justCleared) return;
 
-  // If browser restores inputs, sync DOM -> filters, then style
   const b = document.getElementById("fBrand");
   const s = document.getElementById("fSeason");
   const st = document.getElementById("fStyle");
