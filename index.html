@@ -58,8 +58,7 @@
 <div class="authbar">
  <a href="/.auth/login/aad">Sign in</a>
  <a href="/.auth/login/aad?login_hint=admin@ngac-newtimesgroup.com&prompt=login">Admin sign in</a>
-
-  /div>
+</div>
 
  
 
@@ -183,7 +182,7 @@ async function loadAuthContext() {
     }
 
   } catch (e) {
-    // If /.auth/me fails (not logged in yet), we just run in anonymous mode.
+    // If /.auth/me fails (not logged in yet), run in anonymous mode.
   }
 }
 
@@ -327,11 +326,11 @@ function rowMatchesSelectedBrand(r) {
 function keyAllowed(k) {
   const kk = String(k || "");
 
-  // Hide Snap/Diff for non-internal users
+  // Hide Snap/Diff for brand users
   if (!SHOW_SNAP && kk.indexOf("Snap ") === 0) return false;
   if (!SHOW_DIFF && (kk === "Diff_OH" || kk === "Diff_ATS")) return false;
 
-  // Brand locked: only allow that brand's prefixed columns + (optional) NetSuite totals
+  // Brand locked: only allow that brand's prefixed columns + NetSuite totals
   if (BRAND_LOCK) {
     const prefix = String(BRAND_LOCK).trim() + " ";
     if (kk.indexOf(prefix) === 0) return true;
@@ -611,7 +610,7 @@ async function loadRows() {
   updateBrandCacheFromRows(rowsNormalized);
   renderBrandDropdown();
 
-  // UI-side lock as a second layer (real lock should be in API)
+  // UI-side lock as a second layer
   if (BRAND_LOCK) {
     rowsNormalized = rowsNormalized.filter(rowMatchesSelectedBrand);
   } else if (selectedBrand !== "__ALL__") {
@@ -706,7 +705,7 @@ function buildExportQueryParams(fileType) {
   qs.set("format", "new");
   qs.set("file", fileType);
 
-  // Exact brand selection dropdown (matches the table view)
+  // brand selection drop down
   if (BRAND_LOCK) {
     qs.set("brandView", BRAND_LOCK);
   } else if (selectedBrand && selectedBrand !== "__ALL__") {
@@ -762,7 +761,7 @@ document.querySelectorAll('input[name="compareMode"]').forEach(r => {
 });
 
 (async () => {
-  await loadAuthContext();   // NEW: roles/brand lock + Snap/Diff hiding
+  await loadAuthContext();
   await loadSnapshots();
   await loadRows();
 })();
