@@ -26,7 +26,6 @@
     .filter-input { width: 100%; box-sizing: border-box; padding: 5px; }
     .muted { color: #666; font-size: 12px; }
 
-    /* Keep SKU from wrapping and keep a usable width */
     th.col-sku, td.col-sku {
       white-space: nowrap;
       word-break: normal;
@@ -34,26 +33,33 @@
       min-width: 160px;
     }
 
-    /* Stacked inventory header lines */
     .th-stack { line-height: 1.05; text-align: center; white-space: nowrap; }
     .th-stack .l1 { font-weight: 700; }
     .th-stack .l2 { font-weight: 600; font-size: 12px; opacity: 0.9; }
     .th-stack .l3 { font-weight: 600; font-size: 12px; opacity: 0.9; }
 
-    /* Sticky header */
     thead th { position: sticky; top: 0; z-index: 3; background: #f3f3f3; }
     .filter-row th { position: sticky; top: 38px; z-index: 2; background: #fafafa; }
 
-    /* Active filter styling */
     .filter-input.active-filter { outline: 2px solid #2563eb; background: #eff6ff; }
     th.has-filter { background: #fff7ed !important; }
     .filter-badge { margin-left: 6px; font-size: 12px; opacity: 0.85; }
+
+    .authbar { display:flex; gap:12px; align-items:center; margin: 6px 0 14px; }
+    .authbar a { font-size: 13px; }
+    .pill { font-size: 12px; padding: 2px 8px; border: 1px solid #ddd; border-radius: 999px; background: #fafafa; }
   </style>
 </head>
 
 <body>
 
 <h2>Inventory Comparison</h2>
+
+<div class="authbar">
+  <a href="/.auth/login/aad">Sign in</a>
+  <a href="/.auth/logout">Sign out</a>
+  <span id="authInfo" class="pill" style="display:none;"></span>
+</div>
 
 <div class="row">
   <select id="snapshots"></select>
@@ -72,14 +78,13 @@
     Available to Sell
   </label>
 
-  <label class="mode">
+  <label class="mode" id="onlyDiffWrap">
     <input type="checkbox" id="onlyDiff" />
     Only show differences
   </label>
 
   <button id="clearFilters">Clear Filters</button>
 
-  <!-- CHANGED: separate export buttons -->
   <button id="exportCsv">Export CSV</button>
   <button id="exportXlsx">Export Excel</button>
 
@@ -108,12 +113,77 @@ let dynamicInvKeys = [];
 let visibleColumns = [];
 
 const filters = { brand: "", season: "", style: "", sku: "" };
-
 let justCleared = false;
 
 // Brand dropdown state
-let selectedBrand = "__ALL__";           // "__ALL__" means no brand filtering
-const brandCache = {};                  // { "Ashworth": true, ... }
+let selectedBrand = "__ALL__";
+const brandCache = {};
+
+// ===== Auth/Role-derived view controls =====
+let AUTH_ROLES = [];
+let IS_INTERNAL = false;
+let BRAND_LOCK = "";      // e.g. "Robert Talbott" | "Ashworth" | "Bike" | "NPG" | ""
+let SHOW_SNAP = true;     // internal only
+let SHOW_DIFF = true;     // internal only
+
+const ROLE_TO_BRAND = {
+  "rt": "Robert Talbott",
+  "ashworth": "Ashworth",
+  "bike": "Bike",
+  "npg": "NPG"
+};
+
+async function loadAuthContext() {
+  try {
+    const res = await fetch("/.auth/me", { cache: "no-store" });
+    if (!res.ok) return;
+    const data = await res.json();
+
+    // SWA returns an array; first entry has clientPrincipal
+    const cp = (data && data.clientPrincipal) ? data.clientPrincipal
+              : (Array.isArray(data) && data[0] && data[0].clientPrincipal ? data[0].clientPrincipal : null);
+    if (!cp) return;
+
+    const roles = (cp.userRoles || []).map(r => String(r || "").toLowerCase());
+    AUTH_ROLES = roles;
+
+    IS_INTERNAL = roles.indexOf("internal") >= 0;
+    SHOW_SNAP = IS_INTERNAL;
+    SHOW_DIFF = IS_INTERNAL;
+
+    BRAND_LOCK = "";
+    for (const role in ROLE_TO_BRAND) {
+      if (roles.indexOf(role) >= 0) { BRAND_LOCK = ROLE_TO_BRAND[role]; break; }
+    }
+
+    // Update auth pill
+    const info = document.getElementById("authInfo");
+    if (info) {
+      info.style.display = "";
+      const u = cp.userDetails || "";
+      const roleLabel = IS_INTERNAL ? "internal" : (BRAND_LOCK ? ("brand:" + BRAND_LOCK) : "no-role");
+      info.textContent = u ? (u + " • " + roleLabel) : roleLabel;
+    }
+
+    // If not internal, hide Only Diff toggle (diff data should not be shown)
+    if (!SHOW_DIFF) {
+      const wrap = document.getElementById("onlyDiffWrap");
+      if (wrap) wrap.style.display = "none";
+      const cb = document.getElementById("onlyDiff");
+      if (cb) cb.checked = false;
+    }
+
+    // If brand-locked, force it and hide dropdown
+    if (BRAND_LOCK) {
+      selectedBrand = BRAND_LOCK;
+      const sel = document.getElementById("brandSelect");
+      if (sel) sel.style.display = "none";
+    }
+
+  } catch (e) {
+    // If /.auth/me fails (not logged in yet), we just run in anonymous mode.
+  }
+}
 
 function debounce(fn, ms) {
   let t;
@@ -211,6 +281,17 @@ function updateBrandCacheFromRows(rowsNormalized) {
 
 function renderBrandDropdown() {
   const sel = document.getElementById("brandSelect");
+  if (!sel) return;
+
+  // Brand-locked users don't see dropdown
+  if (BRAND_LOCK) {
+    sel.style.display = "none";
+    selectedBrand = BRAND_LOCK;
+    return;
+  } else {
+    sel.style.display = "";
+  }
+
   const current = selectedBrand;
 
   sel.innerHTML = "";
@@ -235,18 +316,29 @@ function renderBrandDropdown() {
 }
 
 function rowMatchesSelectedBrand(r) {
+  if (BRAND_LOCK) return normStr(r.brand) === normStr(BRAND_LOCK);
   if (!selectedBrand || selectedBrand === "__ALL__") return true;
   return normStr(r.brand) === normStr(selectedBrand);
 }
 
-function keyAllowedForSelectedBrand(k) {
-  if (!selectedBrand || selectedBrand === "__ALL__") return true;
+// Central rule: which inventory keys are allowed to show in the UI
+function keyAllowed(k) {
+  const kk = String(k || "");
 
-  if (k === "NetSuite Total On Hand" || k === "Snap Total On Hand" || k === "Diff_OH") return true;
-  if (k === "NetSuite Total ATS" || k === "Snap Total ATS" || k === "Diff_ATS") return true;
+  // Hide Snap/Diff for non-internal users
+  if (!SHOW_SNAP && kk.indexOf("Snap ") === 0) return false;
+  if (!SHOW_DIFF && (kk === "Diff_OH" || kk === "Diff_ATS")) return false;
 
-  const prefix = String(selectedBrand).trim() + " ";
-  return String(k || "").indexOf(prefix) === 0;
+  // Brand locked: only allow that brand's prefixed columns + (optional) NetSuite totals
+  if (BRAND_LOCK) {
+    const prefix = String(BRAND_LOCK).trim() + " ";
+    if (kk.indexOf(prefix) === 0) return true;
+    if (kk.indexOf("NetSuite Total") === 0) return true;
+    return false;
+  }
+
+  // Not locked: allow all keys (subject to Snap/Diff flags above)
+  return true;
 }
 
 function buildColumnsFromRows(rowsNormalized) {
@@ -273,9 +365,10 @@ function buildColumnsFromRows(rowsNormalized) {
   }
 
   const allKeys = Object.keys(keySet).filter(function(k){
-    return keyMatchesMode(k) && keyAllowedForSelectedBrand(k);
+    return keyMatchesMode(k) && keyAllowed(k);
   });
 
+  // Preferred ordering, but only include what is allowed
   const preferredOrderOnHand = ["NetSuite Total On Hand","Snap Total On Hand","Diff_OH"];
   const preferredOrderATS = ["NetSuite Total ATS","Snap Total ATS","Diff_ATS"];
   const preferredOrder = (mode === "available") ? preferredOrderATS : preferredOrderOnHand;
@@ -477,11 +570,17 @@ async function loadRows() {
   const mode = getCompareMode();
   const diffKey = getDiffKeyForMode(mode);
 
-  if (!sortField || sortField === "Diff_OH" || sortField === "Diff_ATS") {
-    sortField = diffKey;
+  // If diff isn't allowed, avoid sorting by diff
+  if (!SHOW_DIFF && (sortField === "Diff_OH" || sortField === "Diff_ATS")) {
+    sortField = "";
   }
 
-  const onlyDiff = document.getElementById("onlyDiff").checked ? "1" : "0";
+  if (!sortField || sortField === "Diff_OH" || sortField === "Diff_ATS") {
+    sortField = SHOW_DIFF ? diffKey : "sku";
+    sortDir = SHOW_DIFF ? "desc" : "asc";
+  }
+
+  const onlyDiff = (SHOW_DIFF && document.getElementById("onlyDiff").checked) ? "1" : "0";
 
   const qs = new URLSearchParams({
     page,
@@ -497,6 +596,11 @@ async function loadRows() {
 
   qs.set("format", "new");
 
+  // If brand locked, force brandView so export/table match
+  if (BRAND_LOCK) {
+    qs.set("brand", BRAND_LOCK);
+  }
+
   const res = await fetch(`${API_BASE}/snapshots/${snapshotId}/rows?` + qs.toString());
   const data = await res.json();
 
@@ -505,11 +609,14 @@ async function loadRows() {
   updateBrandCacheFromRows(rowsNormalized);
   renderBrandDropdown();
 
-  if (selectedBrand !== "__ALL__") {
+  // UI-side lock as a second layer (real lock should be in API)
+  if (BRAND_LOCK) {
+    rowsNormalized = rowsNormalized.filter(rowMatchesSelectedBrand);
+  } else if (selectedBrand !== "__ALL__") {
     rowsNormalized = rowsNormalized.filter(rowMatchesSelectedBrand);
   }
 
-  if (document.getElementById("onlyDiff").checked) {
+  if (SHOW_DIFF && document.getElementById("onlyDiff").checked) {
     rowsNormalized = rowsNormalized.filter(r => {
       const v = (r.inv && r.inv[diffKey]) != null ? Number(r.inv[diffKey]) : 0;
       return v !== 0;
@@ -519,10 +626,10 @@ async function loadRows() {
   buildColumnsFromRows(rowsNormalized);
   renderHeader();
 
-  const brandLabel = (selectedBrand === "__ALL__") ? "All Brands" : selectedBrand;
+  const brandLabel = BRAND_LOCK ? BRAND_LOCK : ((selectedBrand === "__ALL__") ? "All Brands" : selectedBrand);
 
   document.getElementById("meta").textContent =
-    `Total rows: ${data.total} | Sort: ${sortField}_${sortDir} | Mode: ${mode} | Diff field: ${diffKey} | Brand view: ${brandLabel} | Filters apply on Enter`;
+    `Total rows: ${data.total} | Sort: ${sortField}_${sortDir} | Mode: ${mode} | Brand view: ${brandLabel}`;
 
   const tbody = document.getElementById("rows");
   tbody.innerHTML = "";
@@ -543,6 +650,8 @@ async function loadRows() {
       const n = toNumberOrNull(v);
 
       if (isDiffCol) {
+        // If diff isn't allowed, it won't be in dynamicInvKeys, but keep safe
+        if (!SHOW_DIFF) return;
         const dv = (toNumberOrNull(v) ?? 0);
         const c = dv === 0 ? "#15803d" : (dv > 0 ? "#b45309" : "#b91c1c");
         html += `<td class="num" style="font-weight:700;color:${c};">${escapeHtml(dv)}</td>`;
@@ -577,12 +686,9 @@ window.addEventListener("pageshow", () => {
   }
 });
 
-/* =========================
-   CHANGED: Export helpers
-   ========================= */
 function buildExportQueryParams(fileType) {
   const snapshotId = document.getElementById("snapshots").value;
-  const onlyDiff = document.getElementById("onlyDiff").checked ? "1" : "0";
+  const onlyDiff = (SHOW_DIFF && document.getElementById("onlyDiff").checked) ? "1" : "0";
 
   const qs = new URLSearchParams({
     snapshotId,
@@ -596,10 +702,12 @@ function buildExportQueryParams(fileType) {
   });
 
   qs.set("format", "new");
-  qs.set("file", fileType); // csv | xlsx
+  qs.set("file", fileType);
 
-  // exact brand selection dropdown (matches the table view)
-  if (selectedBrand && selectedBrand !== "__ALL__") {
+  // Exact brand selection dropdown (matches the table view)
+  if (BRAND_LOCK) {
+    qs.set("brandView", BRAND_LOCK);
+  } else if (selectedBrand && selectedBrand !== "__ALL__") {
     qs.set("brandView", selectedBrand);
   }
 
@@ -633,11 +741,8 @@ async function exportFile(fileType) {
   a.remove();
   URL.revokeObjectURL(url);
 }
-/* ========================= */
 
 document.getElementById("clearFilters").addEventListener("click", clearAllFilters);
-
-// CHANGED: new button IDs
 document.getElementById("exportCsv").addEventListener("click", () => exportFile("csv"));
 document.getElementById("exportXlsx").addEventListener("click", () => exportFile("xlsx"));
 
@@ -655,6 +760,7 @@ document.querySelectorAll('input[name="compareMode"]').forEach(r => {
 });
 
 (async () => {
+  await loadAuthContext();   // NEW: roles/brand lock + Snap/Diff hiding
   await loadSnapshots();
   await loadRows();
 })();
