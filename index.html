@@ -215,6 +215,7 @@ function normalizeRow(r) {
     brand: r.Brand || r.brand || "",
     season: r.Season || r.season || "",
     style: r.Style || r.style || "",
+    title: r.Title || r.title || r.ItemName || r.item_name || "",
     sku: r.SKU || r.sku || "",
     inv: inv0 || {}
   };
@@ -386,6 +387,7 @@ function buildColumnsFromRows(rowsNormalized) {
     { key: "brand", label: "Brand", sortKey: "brand" },
     { key: "season", label: "Season", sortKey: "season" },
     { key: "style", label: "Style", sortKey: "style" },
+    { key: "title", label: "Title", sortKey: "title" },
     { key: "sku", label: "SKU", sortKey: "sku", thClass: "col-sku" }
   ];
 
@@ -641,6 +643,7 @@ qs.set("format", "new");
     html += `<td>${escapeHtml(r.brand)}</td>`;
     html += `<td>${escapeHtml(r.season)}</td>`;
     html += `<td>${escapeHtml(r.style)}</td>`;
+    html += `<td>${escapeHtml(r.title)}</td>`;
     html += `<td class="col-sku">${escapeHtml(r.sku)}</td>`;
 
     dynamicInvKeys.forEach(k => {
