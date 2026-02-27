@@ -556,7 +556,7 @@ async function loadSnapshots() {
     data.forEach(s => {
       const opt = document.createElement("option");
       opt.value = s.snapshotId;
-      opt.textContent = `${new Date(s.snapshotDate).toLocaleDateString()} (${s.rowCount})`;
+      opt.textContent = `${s.snapshotDate} (${s.rowCount})`;
       sel.appendChild(opt);
     });
   } else {
