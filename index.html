@@ -583,26 +583,25 @@ async function loadRows() {
 
   const onlyDiff = (SHOW_DIFF && document.getElementById("onlyDiff").checked) ? "1" : "0";
 
-  const qs = new URLSearchParams({
-    page,
-    pageSize,
-    brand: filters.brand,
-    season: filters.season,
-    style: filters.style,
-    sku: filters.sku,
-    compareMode: mode,
-    sort: `${sortField}_${sortDir}`,
-    onlyDiff
-  });
+const brandParam =
+  BRAND_LOCK ? BRAND_LOCK :
+  (filters.brand && filters.brand.trim() ? filters.brand.trim() :
+   (selectedBrand !== "__ALL__" ? selectedBrand : ""));
 
-  qs.set("format", "new");
+const qs = new URLSearchParams({
+  page,
+  pageSize,
+  brand: brandParam,          // ✅ dropdown (or typed filter) goes here
+  season: filters.season,
+  style: filters.style,
+  sku: filters.sku,
+  compareMode: mode,
+  sort: `${sortField}_${sortDir}`,
+  onlyDiff
+});
 
-  // Apply dropdown brand selection on the server so paging/sorting work
-  if (BRAND_LOCK) {
-    qs.set("brandView", BRAND_LOCK);
-  } else if (selectedBrand && selectedBrand !== "__ALL__") {
-    qs.set("brandView", selectedBrand);
-  }
+qs.set("format", "new");
+  
 
   const res = await fetch(`${API_BASE}/snapshots/${snapshotId}/rows?` + qs.toString());
   const data = await res.json();
