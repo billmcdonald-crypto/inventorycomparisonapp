@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <title>Sign in</title>
   <style>
-    body { font-family: system-ui; display:flex; min-height:100vh; align-items:center; justify-content:center; }
+    body { font-family: system-ui; display:flex; min-height:100vh; align-items:center; justify-content:center; padding:16px; }
     .card { max-width:420px; width:100%; border:1px solid #ddd; padding:22px; border-radius:12px; }
     button { width:100%; padding:10px; font-size:16px; cursor:pointer; }
     .muted { color:#666; font-size:13px; margin-top:10px; }
@@ -14,24 +14,20 @@
   <div class="card">
     <h2>Inventory Comparison</h2>
     <p>Please sign in to continue.</p>
+
     <button id="btn">Sign in with Microsoft</button>
-    <div class="muted">You’ll be redirected to your organization’s login.</div>
+
+    <div class="muted">
+      You’ll be redirected to your organization’s login.
+    </div>
   </div>
 
   <script>
-    // Send the user back to where they were trying to go
-    const returnTo = encodeURIComponent(sessionStorage.getItem("returnTo") || "/");
+    // Return user to the page they originally asked for
+    const returnTo = encodeURIComponent((location.search.match(/returnTo=([^&]+)/) || [])[1] || "/");
     document.getElementById("btn").onclick = () => {
       window.location.href = `/.auth/login/aad?post_login_redirect_uri=${returnTo}`;
     };
-
-    // If they arrived here from a deep link, remember it
-    if (document.referrer && !sessionStorage.getItem("returnTo")) {
-      try {
-        const u = new URL(document.referrer);
-        sessionStorage.setItem("returnTo", u.pathname + u.search + u.hash);
-      } catch (e) {}
-    }
   </script>
 </body>
 </html>
