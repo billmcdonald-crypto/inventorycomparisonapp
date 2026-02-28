@@ -6,8 +6,11 @@
 
   <style>
     body { font-family: system-ui; padding: 16px; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ddd; padding: 6px; }
+
+    /* ✅ Make column widths stable (no reflow based on current data) */
+    table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+    th, td { border: 1px solid #ddd; padding: 6px; overflow: hidden; text-overflow: ellipsis; }
+
     th { background: #f3f3f3; vertical-align: middle; }
     .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
     input, select, button { padding: 6px; }
@@ -26,12 +29,18 @@
     .filter-input { width: 100%; box-sizing: border-box; padding: 5px; }
     .muted { color: #666; font-size: 12px; }
 
+    /* ✅ Tweakable widths */
+    th.col-brand, td.col-brand { width: 140px; }
+    th.col-season, td.col-season { width: 90px; }
+    th.col-style, td.col-style { width: 110px; }
+    th.col-title, td.col-title { width: 320px; }
     th.col-sku, td.col-sku {
+      width: 200px;
       white-space: nowrap;
       word-break: normal;
       overflow-wrap: normal;
-      min-width: 160px;
     }
+    th.col-inv, td.col-inv { width: 110px; }
 
     .th-stack { line-height: 1.05; text-align: center; white-space: nowrap; }
     .th-stack .l1 { font-weight: 700; }
@@ -65,8 +74,6 @@
  <a href="/.auth/login/aad">Sign in</a>
  <a href="/.auth/login/aad?login_hint=admin@ngac-newtimesgroup.com&prompt=login">Admin sign in</a>
 </div> -->
-
- 
 
 <div class="row">
   <select id="snapshots"></select>
@@ -389,16 +396,17 @@ function buildColumnsFromRows(rowsNormalized) {
 
   dynamicInvKeys = preferred.concat(remaining);
 
+  /* ✅ add thClass/tdClass so widths are stable & tweakable */
   visibleColumns = [
-    { key: "brand", label: "Brand", sortKey: "brand" },
-    { key: "season", label: "Season", sortKey: "season" },
-    { key: "style", label: "Style", sortKey: "style" },
-    { key: "title", label: "Title", sortKey: "title" },
-    { key: "sku", label: "SKU", sortKey: "sku", thClass: "col-sku" }
+    { key: "brand",  label: "Brand",  sortKey: "brand",  thClass: "col-brand",  tdClass: "col-brand" },
+    { key: "season", label: "Season", sortKey: "season", thClass: "col-season", tdClass: "col-season" },
+    { key: "style",  label: "Style",  sortKey: "style",  thClass: "col-style",  tdClass: "col-style" },
+    { key: "title",  label: "Title",  sortKey: "title",  thClass: "col-title",  tdClass: "col-title" },
+    { key: "sku",    label: "SKU",    sortKey: "sku",    thClass: "col-sku",    tdClass: "col-sku" }
   ];
 
   dynamicInvKeys.forEach(k => {
-    visibleColumns.push({ key: k, label: k, sortKey: k });
+    visibleColumns.push({ key: k, label: k, sortKey: k, thClass: "col-inv", tdClass: "col-inv" });
   });
 }
 
@@ -591,25 +599,24 @@ async function loadRows() {
 
   const onlyDiff = (SHOW_DIFF && document.getElementById("onlyDiff").checked) ? "1" : "0";
 
-const brandParam =
-  BRAND_LOCK ? BRAND_LOCK :
-  (filters.brand && filters.brand.trim() ? filters.brand.trim() :
-   (selectedBrand !== "__ALL__" ? selectedBrand : ""));
+  const brandParam =
+    BRAND_LOCK ? BRAND_LOCK :
+    (filters.brand && filters.brand.trim() ? filters.brand.trim() :
+     (selectedBrand !== "__ALL__" ? selectedBrand : ""));
 
-const qs = new URLSearchParams({
-  page,
-  pageSize,
-  brand: brandParam,          // ✅ dropdown (or typed filter) goes here
-  season: filters.season,
-  style: filters.style,
-  sku: filters.sku,
-  compareMode: mode,
-  sort: `${sortField}_${sortDir}`,
-  onlyDiff
-});
+  const qs = new URLSearchParams({
+    page,
+    pageSize,
+    brand: brandParam,          // ✅ dropdown (or typed filter) goes here
+    season: filters.season,
+    style: filters.style,
+    sku: filters.sku,
+    compareMode: mode,
+    sort: `${sortField}_${sortDir}`,
+    onlyDiff
+  });
 
-qs.set("format", "new");
-  
+  qs.set("format", "new");
 
   const res = await fetch(`${API_BASE}/snapshots/${snapshotId}/rows?` + qs.toString());
   const data = await res.json();
@@ -646,10 +653,10 @@ qs.set("format", "new");
     const tr = document.createElement("tr");
 
     let html = "";
-    html += `<td>${escapeHtml(r.brand)}</td>`;
-    html += `<td>${escapeHtml(r.season)}</td>`;
-    html += `<td>${escapeHtml(r.style)}</td>`;
-    html += `<td>${escapeHtml(r.title)}</td>`;
+    html += `<td class="col-brand">${escapeHtml(r.brand)}</td>`;
+    html += `<td class="col-season">${escapeHtml(r.season)}</td>`;
+    html += `<td class="col-style">${escapeHtml(r.style)}</td>`;
+    html += `<td class="col-title">${escapeHtml(r.title)}</td>`;
     html += `<td class="col-sku">${escapeHtml(r.sku)}</td>`;
 
     dynamicInvKeys.forEach(k => {
@@ -662,11 +669,11 @@ qs.set("format", "new");
         if (!SHOW_DIFF) return;
         const dv = (toNumberOrNull(v) ?? 0);
         const c = dv === 0 ? "#15803d" : (dv > 0 ? "#b45309" : "#b91c1c");
-        html += `<td class="num" style="font-weight:700;color:${c};">${escapeHtml(dv)}</td>`;
+        html += `<td class="num col-inv" style="font-weight:700;color:${c};">${escapeHtml(dv)}</td>`;
       } else if (n !== null) {
-        html += `<td class="num">${escapeHtml(n)}</td>`;
+        html += `<td class="num col-inv">${escapeHtml(n)}</td>`;
       } else {
-        html += `<td>${escapeHtml(v)}</td>`;
+        html += `<td class="col-inv">${escapeHtml(v)}</td>`;
       }
     });
 
