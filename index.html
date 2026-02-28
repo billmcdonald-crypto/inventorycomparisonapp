@@ -7,7 +7,7 @@
   <style>
     body { font-family: system-ui; padding: 16px; }
 
-    /* ✅ Make column widths stable (no reflow based on current data) */
+    /* Column Widths */
     table { border-collapse: collapse; width: 100%; table-layout: fixed; }
     th, td { border: 1px solid #ddd; padding: 6px; overflow: hidden; text-overflow: ellipsis; }
 
@@ -29,7 +29,7 @@
     .filter-input { width: 100%; box-sizing: border-box; padding: 5px; }
     .muted { color: #666; font-size: 12px; }
 
-    /* ✅ Tweakable widths */
+    /* Tweakable widths */
     th.col-brand, td.col-brand { width: 140px; }
     th.col-season, td.col-season { width: 90px; }
     th.col-style, td.col-style { width: 110px; }
@@ -396,7 +396,7 @@ function buildColumnsFromRows(rowsNormalized) {
 
   dynamicInvKeys = preferred.concat(remaining);
 
-  /* ✅ add thClass/tdClass so widths are stable & tweakable */
+  /* Add thClass/tdClass so widths are stable & tweakable */
   visibleColumns = [
     { key: "brand",  label: "Brand",  sortKey: "brand",  thClass: "col-brand",  tdClass: "col-brand" },
     { key: "season", label: "Season", sortKey: "season", thClass: "col-season", tdClass: "col-season" },
@@ -588,9 +588,14 @@ async function loadRows() {
   const diffKey = getDiffKeyForMode(mode);
 
   // If diff isn't allowed, avoid sorting by diff
-  if (!SHOW_DIFF && (sortField === "Diff_OH" || sortField === "Diff_ATS")) {
-    sortField = "";
-  }
+  //if (!SHOW_DIFF && (sortField === "Diff_OH" || sortField === "Diff_ATS")) {
+  //  sortField = "";
+  //}
+
+if (!sortField) {
+  sortField = "brand";
+  sortDir = "asc";
+}
 
   if (!sortField || sortField === "Diff_OH" || sortField === "Diff_ATS") {
     sortField = SHOW_DIFF ? diffKey : "sku";
@@ -607,7 +612,7 @@ async function loadRows() {
   const qs = new URLSearchParams({
     page,
     pageSize,
-    brand: brandParam,          // ✅ dropdown (or typed filter) goes here
+    brand: brandParam,          
     season: filters.season,
     style: filters.style,
     sku: filters.sku,
