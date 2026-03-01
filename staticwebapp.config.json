@@ -1,22 +1,24 @@
 {
   "routes": [
-    {
-      "route": "/login",
-      "allowedRoles": ["anonymous"]
-    },
-    {
-      "route": "/*",
-      "allowedRoles": ["authenticated"]
-    }
+    { "route": "/login", "allowedRoles": ["anonymous"] },
+
+    { "route": "/api/*", "allowedRoles": ["internal", "bike", "rt", "ashworth"] },
+
+    { "route": "/*", "allowedRoles": ["authenticated"] }
   ],
   "responseOverrides": {
-    "401": {
-      "redirect": "/login",
-      "statusCode": 302
-    },
-    "403": {
-      "redirect": "/login",
-      "statusCode": 302
+    "401": { "redirect": "/login", "statusCode": 302 },
+    "403": { "redirect": "/login", "statusCode": 302 }
+  },
+  "auth": {
+    "identityProviders": {
+      "azureActiveDirectory": {
+        "registration": {
+          "openIdIssuer": "https://login.microsoftonline.com/<YOUR_TENANT_ID>/v2.0",
+          "clientIdSettingName": "ENTRA_CLIENT_ID",
+          "clientSecretSettingName": "ENTRA_CLIENT_SECRET"
+        }
+      }
     }
   }
 }
