@@ -4,7 +4,7 @@
 
     { "route": "/api/health", "allowedRoles": ["anonymous", "authenticated"] },
 
-    // needed to allow for Getroles
+    // needed to allow for Getroles - keeping GetRoles capital
     { "route": "/api/GetRoles", "allowedRoles": ["anonymous", "authenticated"] },
 
     { "route": "/api/rolesping", "allowedRoles": ["anonymous", "authenticated"] },
