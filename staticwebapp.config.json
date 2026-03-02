@@ -3,15 +3,13 @@
     { "route": "/login", "allowedRoles": ["anonymous", "authenticated"] },
 
     { "route": "/api/health", "allowedRoles": ["anonymous", "authenticated"] },
-
-    // needed to allow for Getroles - keeping GetRoles capital
+    
     { "route": "/api/GetRoles", "allowedRoles": ["anonymous", "authenticated"] },
 
     { "route": "/api/rolesping", "allowedRoles": ["anonymous", "authenticated"] },
 
     { "route": "/api/getroles",  "allowedRoles": ["anonymous", "authenticated"] },
-
-    // protected API
+    
     { "route": "/api/*", "allowedRoles": ["internal", "bike", "rt", "ashworth"] },
 
     { "route": "/*", "allowedRoles": ["authenticated"] }
