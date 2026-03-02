@@ -1,22 +1,22 @@
 {
   "routes": [
-    { "route": "/login", "allowedRoles": ["anonymous"] },
+    { "route": "/login", "allowedRoles": ["anonymous", "authenticated"] },
+
+    { "route": "/api/health", "allowedRoles": ["anonymous", "authenticated"] },
+
     { "route": "/api/*", "allowedRoles": ["internal", "bike", "rt", "ashworth"] },
+
     { "route": "/*", "allowedRoles": ["authenticated"] }
   ],
   "responseOverrides": {
     "401": { "redirect": "/login", "statusCode": 302 },
     "403": { "redirect": "/login", "statusCode": 302 }
   },
-  "navigationFallback": {
-    "rewrite": "/index.html",
-    "exclude": ["/api/*", "/.auth/*"]
-  },
   "auth": {
     "identityProviders": {
       "azureActiveDirectory": {
         "registration": {
-          "openIdIssuer": "https://login.microsoftonline.com/b37ebafe-236c-42d0-a008-001f9e6c4a08/v2.0",
+          "openIdIssuer": "https://login.microsoftonline.com/b37ebafe-236c-42d0-a008-001f9e6c4a08",
           "clientIdSettingName": "ENTRA_CLIENT_ID",
           "clientSecretSettingName": "ENTRA_CLIENT_SECRET"
         }
