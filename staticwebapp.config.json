@@ -4,6 +4,10 @@
 
     { "route": "/api/health", "allowedRoles": ["anonymous", "authenticated"] },
 
+    // ✅ MUST be reachable so rolesSource can work
+    { "route": "/api/GetRoles", "allowedRoles": ["anonymous", "authenticated"] },
+
+    // Your protected API
     { "route": "/api/*", "allowedRoles": ["internal", "bike", "rt", "ashworth"] },
 
     { "route": "/*", "allowedRoles": ["authenticated"] }
@@ -16,7 +20,7 @@
     "identityProviders": {
       "azureActiveDirectory": {
         "registration": {
-          "openIdIssuer": "https://login.microsoftonline.com/b37ebafe-236c-42d0-a008-001f9e6c4a08",
+          "openIdIssuer": "https://login.microsoftonline.com/<REDACTED>/v2.0",
           "clientIdSettingName": "ENTRA_CLIENT_ID",
           "clientSecretSettingName": "ENTRA_CLIENT_SECRET"
         }
