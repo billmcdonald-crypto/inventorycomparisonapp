@@ -7,6 +7,10 @@
     // needed to allow for Getroles
     { "route": "/api/GetRoles", "allowedRoles": ["anonymous", "authenticated"] },
 
+    { "route": "/api/rolesping", "allowedRoles": ["anonymous", "authenticated"] },
+
+    { "route": "/api/getroles",  "allowedRoles": ["anonymous", "authenticated"] },
+
     // protected API
     { "route": "/api/*", "allowedRoles": ["internal", "bike", "rt", "ashworth"] },
 
