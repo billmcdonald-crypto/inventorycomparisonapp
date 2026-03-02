@@ -21,6 +21,7 @@
           "clientSecretSettingName": "ENTRA_CLIENT_SECRET"
         }
       }
-    }
+    },
+    "rolesSource": "/api/GetRoles"
   }
 }
