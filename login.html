@@ -3,7 +3,6 @@
 <head>
   <meta charset="utf-8" />
   <title>Sign in</title>
-
   <style>
     body {
       font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
@@ -14,7 +13,6 @@
       padding: 16px;
       background: #f5f7fa;
     }
-
     .card {
       max-width: 420px;
       width: 100%;
@@ -25,76 +23,49 @@
       box-shadow: 0 8px 24px rgba(0,0,0,0.08);
       text-align: center;
     }
-
-    h2 {
-      margin-top: 0;
-      margin-bottom: 8px;
-    }
-
-    p {
-      margin-top: 0;
-      margin-bottom: 20px;
-      color: #444;
-    }
-
+    h2 { margin-top: 0; margin-bottom: 8px; }
+    p { margin-top: 0; margin-bottom: 20px; color: #444; }
     button {
       width: 100%;
       padding: 12px;
       font-size: 16px;
       font-weight: 600;
       cursor: pointer;
-
-      background: #0b3d6d;        /* navy */
+      background: #0b3d6d;
       color: white;
       border: none;
       border-radius: 8px;
-
       transition: all 0.15s ease;
       box-shadow: 0 3px 8px rgba(0,0,0,0.15);
     }
-
     button:hover {
-      background: #0e4a85;        /* lighter navy on hover */
+      background: #0e4a85;
       transform: translateY(-1px);
       box-shadow: 0 6px 14px rgba(0,0,0,0.2);
     }
-
     button:active {
       transform: translateY(0px);
       box-shadow: 0 2px 6px rgba(0,0,0,0.15);
     }
-
-    .muted {
-      color: #666;
-      font-size: 13px;
-      margin-top: 14px;
-    }
+    .muted { color: #666; font-size: 13px; margin-top: 14px; }
   </style>
 </head>
-
 <body>
   <div class="card">
     <h2>Inventory Comparison</h2>
     <p>Please sign in to continue.</p>
-
     <button id="btn">Sign in with Microsoft</button>
-
-    <div class="muted">
-      You’ll be redirected to your organization’s login.
-    </div>
+    <div class="muted">You’ll be redirected to your organization’s login.</div>
   </div>
 
   <script>
-   
-   const m = location.search.match(/returnTo=([^&]+)/);
+    // Allow optional returnTo query string, default "/"
+    const m = location.search.match(/returnTo=([^&]+)/);
     const returnTo = m ? decodeURIComponent(m[1]) : "/";
-    document.getElementById("btn").onclick = () => {
-    window.location.href = `/.auth/login/aad?post_login_redirect_uri=${encodeURIComponent(returnTo)}`;
-    };
 
     document.getElementById("btn").onclick = () => {
       window.location.href =
-        `/.auth/login/aad?post_login_redirect_uri=${returnTo}`;
+        "/.auth/login/aad?post_login_redirect_uri=" + encodeURIComponent(returnTo);
     };
   </script>
 </body>
