@@ -85,9 +85,12 @@
   </div>
 
   <script>
-    const returnTo = encodeURIComponent(
-      (location.search.match(/returnTo=([^&]+)/) || [])[1] || "/"
-    );
+   
+   const m = location.search.match(/returnTo=([^&]+)/);
+    const returnTo = m ? decodeURIComponent(m[1]) : "/";
+    document.getElementById("btn").onclick = () => {
+    window.location.href = `/.auth/login/aad?post_login_redirect_uri=${encodeURIComponent(returnTo)}`;
+    };
 
     document.getElementById("btn").onclick = () => {
       window.location.href =
