@@ -7,6 +7,8 @@
 
     { "route": "/api/roles-source", "allowedRoles": ["anonymous", "authenticated"] },
 
+    { "route": "/api/GetRoles", "allowedRoles": ["anonymous", "authenticated"] },
+
     { "route": "/api/*", "allowedRoles": ["internal", "bike", "rt", "ashworth"] },
 
     { "route": "/*", "allowedRoles": ["authenticated"] }
