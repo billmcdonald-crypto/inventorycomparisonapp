@@ -1,8 +1,8 @@
 {
   "routes": [
     { "route": "/login", "allowedRoles": ["anonymous", "authenticated"] },
-    
-    { "route": "/api/*", "allowedRoles": ["internal", "bike", "rt", "ashworth"] },
+
+    { "route": "/api/*", "allowedRoles": ["authenticated"] },
 
     { "route": "/*", "allowedRoles": ["authenticated"] }
   ],
