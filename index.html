@@ -637,8 +637,10 @@ if (!sortField) {
 
   if (SHOW_DIFF && document.getElementById("onlyDiff").checked) {
     rowsNormalized = rowsNormalized.filter(r => {
-      const v = (r.inv && r.inv[diffKey]) != null ? Number(r.inv[diffKey]) : 0;
-      return v !== 0;
+    const raw = r.inv ? r.inv[diffKey] : null;
+    if (raw === null || raw === undefined || raw === "") return false; // not comparable => hide
+    const v = Number(raw);
+    return !isNaN(v) && v !== 0;
     });
   }
 
