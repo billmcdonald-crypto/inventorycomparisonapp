@@ -158,8 +158,8 @@ async function loadAuthContext() {
               : (Array.isArray(data) && data[0] && data[0].clientPrincipal ? data[0].clientPrincipal : null);
     if (!cp) return;
 
-    const roles = (cp.userRoles || []).map(r => String(r || "").toLowerCase());
-    AUTH_ROLES = roles;
+//    const roles = (cp.userRoles || []).map(r => String(r || "").toLowerCase());
+//    AUTH_ROLES = roles;
 
 //    IS_INTERNAL = roles.indexOf("internal") >= 0;
 //    SHOW_SNAP = IS_INTERNAL;
