@@ -161,9 +161,18 @@ async function loadAuthContext() {
     const roles = (cp.userRoles || []).map(r => String(r || "").toLowerCase());
     AUTH_ROLES = roles;
 
-    IS_INTERNAL = roles.indexOf("internal") >= 0;
-    SHOW_SNAP = IS_INTERNAL;
-    SHOW_DIFF = IS_INTERNAL;
+//    IS_INTERNAL = roles.indexOf("internal") >= 0;
+//    SHOW_SNAP = IS_INTERNAL;
+//    SHOW_DIFF = IS_INTERNAL;
+
+const roles = (cp.userRoles || []).map(r => String(r || "").toLowerCase());
+AUTH_ROLES = roles;
+
+// For now: any authenticated user is treated as internal
+IS_INTERNAL = roles.indexOf("authenticated") >= 0;
+
+SHOW_SNAP = IS_INTERNAL;
+SHOW_DIFF = IS_INTERNAL;
 
     BRAND_LOCK = "";
     for (const role in ROLE_TO_BRAND) {
