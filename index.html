@@ -365,15 +365,32 @@ function keyAllowed(k) {
   return true;
 }
 
-function buildColumnsFromRows(rowsNormalized, data.allColumns || []);
-  const mode = getCompareMode();
-  const diffKey = getDiffKeyForMode(mode);
+function buildColumnsFromRows(rowsNormalized, allColumns) {
 
-  const keySet = {};
+  let keySet = {};
+
+  if (Array.isArray(allColumns) && allColumns.length) {
+  allColumns.forEach(k => {
+    keySet[k] = true;
+  });
+} else {
   rowsNormalized.forEach(r => {
     const inv = r.inv || {};
-    Object.keys(inv).forEach(k => { keySet[k] = true; });
+    Object.keys(inv).forEach(k => {
+      keySet[k] = true;
+    });
   });
+}
+
+//removing this for now
+// const mode = getCompareMode();
+ // const diffKey = getDiffKeyForMode(mode);
+
+ // const keySet = {};
+ // rowsNormalized.forEach(r => {
+ //   const inv = r.inv || {};
+ //   Object.keys(inv).forEach(k => { keySet[k] = true; });
+ // });
 
   function keyMatchesMode(k) {
     const kk = String(k || "");
@@ -653,7 +670,7 @@ if (!sortField) {
     });
   }
 
-  buildColumnsFromRows(rowsNormalized);
+  buildColumnsFromRows(rowsNormalized, data.allColumns || []);
   renderHeader();
 
   const brandLabel = BRAND_LOCK ? BRAND_LOCK : ((selectedBrand === "__ALL__") ? "All Brands" : selectedBrand);
