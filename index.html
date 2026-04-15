@@ -366,31 +366,23 @@ function keyAllowed(k) {
 }
 
 function buildColumnsFromRows(rowsNormalized, allColumns) {
+  const mode = getCompareMode();
+  const diffKey = getDiffKeyForMode(mode);
 
   let keySet = {};
 
   if (Array.isArray(allColumns) && allColumns.length) {
-  allColumns.forEach(k => {
-    keySet[k] = true;
-  });
-} else {
-  rowsNormalized.forEach(r => {
-    const inv = r.inv || {};
-    Object.keys(inv).forEach(k => {
+    allColumns.forEach(k => {
       keySet[k] = true;
     });
-  });
-}
-
-//removing this for now
-// const mode = getCompareMode();
- // const diffKey = getDiffKeyForMode(mode);
-
- // const keySet = {};
- // rowsNormalized.forEach(r => {
- //   const inv = r.inv || {};
- //   Object.keys(inv).forEach(k => { keySet[k] = true; });
- // });
+  } else {
+    rowsNormalized.forEach(r => {
+      const inv = r.inv || {};
+      Object.keys(inv).forEach(k => {
+        keySet[k] = true;
+      });
+    });
+  }
 
   function keyMatchesMode(k) {
     const kk = String(k || "");
@@ -398,31 +390,31 @@ function buildColumnsFromRows(rowsNormalized, allColumns) {
     const isDiff = (kk === "Diff_OH" || kk === "Diff_ATS");
     if (isDiff) return kk === diffKey;
 
-    const hasOnHand = kk.indexOf("On Hand") >= 0;
-    const hasATS = kk.indexOf("ATS") >= 0;
+    const hasOnHand = (kk.indexOf("On Hand") >= 0) || (kk.indexOf("On-Hand") >= 0);
+    const hasATS = (kk.indexOf("ATS") >= 0) || (kk.indexOf("Available to Sell") >= 0);
 
     if (mode === "available") return hasATS;
     return hasOnHand;
   }
 
-  const allKeys = Object.keys(keySet).filter(function(k){
+  const allKeys = Object.keys(keySet).filter(function(k) {
     return keyMatchesMode(k) && keyAllowed(k);
   });
 
-  // Preferred ordering, but only include what is allowed
-  const preferredOrderOnHand = ["NetSuite Total On Hand","Snap Total On Hand","Diff_OH"];
-  const preferredOrderATS = ["NetSuite Total ATS","Snap Total ATS","Diff_ATS"];
+  const preferredOrderOnHand = ["NetSuite Total On Hand", "Snap Total On Hand", "Diff_OH"];
+  const preferredOrderATS = ["NetSuite Total ATS", "Snap Total ATS", "Diff_ATS"];
   const preferredOrder = (mode === "available") ? preferredOrderATS : preferredOrderOnHand;
 
   const preferred = [];
-  preferredOrder.forEach(k => { if (allKeys.indexOf(k) >= 0) preferred.push(k); });
+  preferredOrder.forEach(k => {
+    if (allKeys.indexOf(k) >= 0) preferred.push(k);
+  });
 
   const remaining = allKeys.filter(k => preferred.indexOf(k) === -1);
-  remaining.sort(function(a,b){ return a.localeCompare(b); });
+  remaining.sort(function(a, b) { return a.localeCompare(b); });
 
   dynamicInvKeys = preferred.concat(remaining);
 
-  /* Add thClass/tdClass so widths are stable & tweakable */
   visibleColumns = [
     { key: "brand",  label: "Brand",  sortKey: "brand",  thClass: "col-brand",  tdClass: "col-brand" },
     { key: "season", label: "Season", sortKey: "season", thClass: "col-season", tdClass: "col-season" },
