@@ -365,7 +365,7 @@ function keyAllowed(k) {
   return true;
 }
 
-function buildColumnsFromRows(rowsNormalized) {
+function buildColumnsFromRows(rowsNormalized, data.allColumns || []);
   const mode = getCompareMode();
   const diffKey = getDiffKeyForMode(mode);
 
